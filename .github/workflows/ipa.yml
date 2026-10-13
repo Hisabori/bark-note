@@ -1,0 +1,56 @@
+name: Build Bark Note IPA
+run-name: Bark Note IPA ${{ github.sha }}
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'lib/**'
+      - 'ios/**'
+      - 'pubspec.*'
+      - '.github/workflows/ipa.yml'
+permissions:
+  contents: read
+jobs:
+  ipa:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - name: Resolve and verify
+        run: |
+          flutter --version
+          flutter pub get
+          flutter analyze
+          flutter test
+          dart tool/check_analysis.dart
+      - name: Build device app without signing
+        run: flutter build ios --release --no-codesign
+      - name: Package unsigned IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/iphoneos/Runner.app"
+          test -d "$APP"
+          test -f "$APP/Runner"
+          /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          mkdir -p build/ipa/Payload
+          ditto "$APP" build/ipa/Payload/Runner.app
+          cd build/ipa
+          /usr/bin/zip -qry Bark-Note-unsigned.ipa Payload
+          /usr/bin/unzip -t Bark-Note-unsigned.ipa
+          shasum -a 256 Bark-Note-unsigned.ipa > SHA256.txt
+          printf '%s\n' 'Unsigned device IPA. Re-sign with Sideloadly before installation. This is not an App Store or TestFlight build.' > INSTALL.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Bark-Note-unsigned-IPA
+          path: |
+            build/ipa/Bark-Note-unsigned.ipa
+            build/ipa/SHA256.txt
+            build/ipa/INSTALL.txt
+          if-no-files-found: error
+          retention-days: 7
