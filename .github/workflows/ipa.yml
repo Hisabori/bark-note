@@ -50,7 +50,13 @@ jobs:
           test -f "$APP/Frameworks/App.framework/flutter_assets/assets/models/yamnet.tflite"
           xcrun nm -gU "$APP/Runner" > build/ios/tflite-symbols.txt
           while IFS= read -r symbol; do
-            grep -F " _$symbol" build/ios/tflite-symbols.txt >/dev/null
+            symbol="${symbol%$'\r'}"
+            if ! grep -F " _$symbol" build/ios/tflite-symbols.txt >/dev/null; then
+              echo "Missing exported TFLite symbol: $symbol"
+              head -50 build/ios/tflite-symbols.txt
+              exit 1
+            fi
+            echo "Verified $symbol"
           done < tool/ios_tflite_symbols.txt
           mkdir -p build/ipa/Payload
           ditto "$APP" build/ipa/Payload/Runner.app
@@ -68,4 +74,6 @@ jobs:
             build/ipa/INSTALL.txt
           if-no-files-found: error
           retention-days: 7
+
+
 
