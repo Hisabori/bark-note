@@ -24,12 +24,13 @@ tasks.register<Delete>("clean") {
 }
 
 // Align the older TFLite plugin's Java bytecode with built-in Kotlin's JVM 17.
-subprojects {
-    if (name == "tflite_flutter") {
+gradle.projectsEvaluated {
+    project(":tflite_flutter").run {
         tasks.withType<JavaCompile>().configureEach {
             sourceCompatibility = "17"
             targetCompatibility = "17"
         }
     }
 }
+
 
