@@ -22,7 +22,7 @@
 연구 참고: https://portal.fis.tum.de/en/publications/what-is-my-dog-trying-to-tell-me-the-automatic-recognition-of-the/ (이 앱의 규칙을 검증하는 자료는 아님)
 
 ## 분석 방식과 한계
-20ms 프레임의 RMS 에너지를 계산하고, 낮은 20% 분위수보다 12dB 높은 기준(최소 -42dBFS)을 넘는 소리를 찾습니다. 120ms 미만 간격은 합치고 80ms–2초 구간을 후보로 집계합니다. 강아지 소리 분류 모델은 포함하지 않습니다. 후보에는 말소리·충격음이 섞일 수 있고 긴/작은 짖음을 놓칠 수 있습니다. 전체가 시끄러운 녹음에서는 감지가 누락될 수 있습니다. 감정 번역 카드는 소리 패턴과 사용자가 선택한 상황을 바탕으로 가능한 상태를 표현합니다. 실제 언어 번역이나 감정 확정, 의도·질병 진단이 아닙니다. 실제 환경에서의 정확도는 검증하지 않았습니다. dBFS는 보정된 실제 소음도(dB SPL)가 아닙니다.
+20ms 프레임의 RMS 에너지를 계산하고, 낮은 20% 분위수보다 12dB 높은 기준(최소 -42dBFS)을 넘는 소리를 찾습니다. 120ms 미만 간격은 합치고 80ms–2초 구간을 후보로 집계합니다. 0.3부터 YAMNet 소리 분류 모델을 포함합니다. 아래 에너지 검출은 AI 검토 전 후보를 만드는 단계입니다. 후보에는 말소리·충격음이 섞일 수 있고 긴/작은 짖음을 놓칠 수 있습니다. 전체가 시끄러운 녹음에서는 감지가 누락될 수 있습니다. 감정 번역 카드는 소리 패턴과 사용자가 선택한 상황을 바탕으로 가능한 상태를 표현합니다. 실제 언어 번역이나 감정 확정, 의도·질병 진단이 아닙니다. 실제 환경에서의 정확도는 검증하지 않았습니다. dBFS는 보정된 실제 소음도(dB SPL)가 아닙니다.
 
 ## 실행 및 빌드
 Flutter 3.47.7 / Dart 3.13.5로 소스 검사를 수행했습니다.
@@ -46,9 +46,9 @@ open ios/Runner.xcworkspace
 ```
 Xcode에서 Signing & Capabilities의 Team과 고유 Bundle Identifier를 설정하고 연결한 iPhone을 선택해 실행하세요. 마이크 권한 설명은 프로젝트에 포함되어 있습니다. IPA 배포에는 Apple 서명과 provisioning이 필요합니다.
 
-`.github/workflows/mobile.yml`은 Android APK와 서명 없는 iOS 빌드를 위한 수동/푸시 CI 예시입니다. 이 세션에서는 실행하지 않았습니다.
+`.github/workflows/ipa.yml`은 미서명 IPA, `android.yml`은 Android APK를 생성합니다. 모델은 공식 URL에서 다운로드 후 해시를 검증합니다.
 
-## 검증 결과
+## 최초 0.1 소스 검증 결과 (현재 빌드 결과와 별개)
 - Dart 정적 분석: 오류 없음
 - 분석 엔진 직접 실행 6개 검사 통과: 반복 소리 횟수, 길이, 무음, 역위상 스테레오, 잘못된 헤더, 잘린 데이터
 - Flutter 테스트 러너: Windows 도구 실행 오류로 완료하지 못함
@@ -67,3 +67,17 @@ Google YAMNet의 실제 사전학습 가중치를 앱에 포함했습니다. 입
 모델 감정 학습은 수행하지 않았습니다. 모델 출처, 해시와 Apache-2.0 라이선스는 assets/models/에 있습니다. GitHub 빌드는 공식 URL에서 모델을 내려받고 SHA256을 검증합니다. 앱 실행 중 모델 다운로드나 녹음 업로드는 없습니다. Android 최소 버전은 Android 8.0(API 26)입니다.
 
 검증: Dart 전처리/판정 검사 10개 + 기존 검사 13개 통과. 같은 Dart 전처리로 만든 ESC-50 개 짖음 샘플, 공식 MediaPipe 말소리 샘플, 무음을 Python LiteRT로 추론했으며 결과는 MODEL_VALIDATION.json에 있습니다. 세 샘플 smoke test이며 환경별 정확도나 휴대폰 추론 성능을 검증한 것은 아닙니다.
+
+
+## 0.3 빌드 결과 (2026-10-14)
+- iOS 미서명 IPA 생성 성공: https://github.com/Hisabori/bark-note/actions/runs/38524719573
+- Android 디버그 APK 생성 성공: https://github.com/Hisabori/bark-note/actions/runs/38524988984
+- 양쪽 GitHub 코드 검사·Flutter 테스트 통과
+- IPA CRC, 모델 SHA256, 버전 0.3.0 / build 3 확인
+- iOS 패키지 내 추론 C 함수 25개 포함 확인 (CI의 nm 검사)
+- APK CRC, 디버그 서명과 모델 SHA256 확인
+- Android arm64 추론 C 함수 25개 확인 (native symbol 검사)
+- 실제 휴대폰 설치·마이크 녹음·모델 추론·처리 시간·배터리 영향: 미검증
+
+IPA는 Sideloadly에서 재서명해 설치해야 합니다. Android는 Android 8.0 이상용 개발 APK입니다. 기존 0.2 IPA에는 이 모델이 포함되어 있지 않으므로 새 0.3 파일을 설치해주세요.
+
