@@ -11,7 +11,10 @@ Map<String, dynamic> interpretEmotion(
   Map<String, dynamic> audio,
   String context,
 ) {
-  final segments = (audio['segments'] as List? ?? []).cast<Map>();
+  final hasAi = audio['ai'] is Map;
+  final segments =
+      (audio[hasAi ? 'verifiedSegments' : 'segments'] as List? ?? [])
+          .cast<Map>();
   Map<String, dynamic> output(
     String label,
     String phrase,
@@ -28,9 +31,14 @@ Map<String, dynamic> interpretEmotion(
     'observe': observe,
     'certainty': '미검증 추정 · 정확도 수치 없음',
   };
+  if (audio['aiError'] != null) {
+    return output('판단 보류', 'AI 소리 확인을 완료하지 못했어요.', [], [
+      '짖음 모델을 실행하지 못해 감정을 해석하지 않습니다.',
+    ], '다시 녹음하거나 앱을 재시작한 뒤 분석해주세요.');
+  }
   if (segments.length < 2) {
     return output('판단 보류', '해석할 소리가 충분하지 않아요.', [], [
-      '짖음 후보가 2개 미만입니다.',
+      hasAi ? 'AI 짖음 후보가 2개 미만입니다.' : '짖음 후보가 2개 미만입니다.',
     ], '조용한 곳에서 여러 번 짖는 구간을 다시 녹음해주세요.');
   }
   final lengths = segments

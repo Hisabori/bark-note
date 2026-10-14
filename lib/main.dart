@@ -3,11 +3,14 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'analyzer.dart';
 import 'emotion.dart';
+import 'bark_model.dart';
+import 'bark_result.dart';
 
 void main() => runApp(const BarkApp());
 
@@ -181,7 +184,25 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     if (await f.length() > 60 * 1024 * 1024) {
       throw const FormatException('60 MB 이하 WAV 파일을 선택해주세요.');
     }
-    final r = await compute(analyzeWav, await f.readAsBytes());
+    final bytes = await f.readAsBytes();
+    final r = await compute(analyzeWav, bytes);
+    if (mounted) {
+      setState(() => status = '사전학습 AI로 소리 종류를 분석하고 있어요…');
+    }
+    try {
+      final model = await rootBundle.load('assets/models/yamnet.tflite');
+      final ai = await compute(classifyBarks, {
+        'audio': bytes,
+        'model': model.buffer.asUint8List(
+          model.offsetInBytes,
+          model.lengthInBytes,
+        ),
+      });
+      applyBarkVerification(r, ai);
+    } catch (_) {
+      r['aiError'] =
+          'AI 분석을 완료하지 못했습니다. 아래 횟수는 소리 크기로 찾은 후보이며 강아지 짖음 확인 결과가 아닙니다.';
+    }
     r['name'] = name;
     r['date'] = DateTime.now().toIso8601String();
     r['note'] = '';
@@ -192,7 +213,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         emotionContext = 'unknown';
         note.clear();
         busy = false;
-        status = '분석 완료 · 결과는 짖음 후보입니다.';
+        status = r['aiError'] == null
+            ? '분석 완료 · 사전학습 YAMNet 적용'
+            : '기본 분석 완료 · AI 분석 실패';
       });
     }
   }
@@ -321,7 +344,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     spacing: 24,
                     runSpacing: 12,
                     children: [
-                      metric('짖음 후보', '${result!['count']}회'),
+                      metric('소리 크기 후보', '${result!['count']}회'),
+                      if (result!['verifiedCount'] != null)
+                        metric('AI 짖음 후보', '${result!['verifiedCount']}회'),
                       metric(
                         '전체 길이',
                         '${(result!['duration'] as num).toStringAsFixed(1)}초',
@@ -350,7 +375,9 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ),
                       ),
                     ),
-                  const Text('초록색: 감지 기준을 넘은 소리 · 음량은 기기 기준 상대값'),
+                  const Text('초록색: 음량 기준을 넘은 소리 · AI 확인 여부와는 별개입니다.'),
+                  const SizedBox(height: 12),
+                  aiPanel(),
                   const SizedBox(height: 12),
                   Text(
                     (result!['count'] as int) == 0
@@ -385,7 +412,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             ),
           panel(
             const Text(
-              '분석 안내\n\n짧고 큰 소리 구간을 찾는 규칙 기반 분석입니다. 강아지 소리 분류·감정 학습 모델은 포함하지 않습니다. 감정 번역은 선택한 상황과 소리 패턴을 바탕으로 만든 미검증 해석이며 실제 강아지의 말이 아닙니다. 사람 목소리·충격음이 섞일 수 있습니다. 녹음은 분석 후 삭제하고 기록은 이 기기에만 보관합니다.',
+              '분석 안내\n\n사전학습된 Google YAMNet으로 소리 종류를 분석합니다. AI 짖음 후보는 음량으로 찾은 구간 중 모델의 짖음 점수가 기준을 넘은 구간입니다. 약 1초 단위의 분석이라 다른 소리가 섞이거나 조용한 짖음을 놓칠 수 있습니다. 감정 학습 모델은 포함하지 않습니다. 감정 번역은 상황 기반 추정입니다. 모델은 기기에 포함되어 녹음을 서버에 보내지 않습니다.',
             ),
           ),
           const Padding(
@@ -513,6 +540,34 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           Text(interpretation['certainty'] as String),
         ],
       ),
+    );
+  }
+
+  Widget aiPanel() {
+    final ai = result!['ai'];
+    if (ai is! Map) {
+      return Text(
+        result!['aiError'] as String? ??
+            '이 기록은 AI 모델 적용 전 분석입니다. 새로 녹음하거나 파일을 다시 분석해주세요.',
+      );
+    }
+    String score(String key) => (ai[key] as num).toStringAsFixed(3);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '사전학습 AI · Google YAMNet',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Text(
+          '최대 모델 점수: 짖음 ${score('barkPeak')} / 강아지 소리 ${score('dogPeak')} / 말소리 ${score('speechPeak')}',
+        ),
+        const Text(
+          '0–1의 모델 점수이며 정확도·감정 확률이 아닙니다. AI 짖음 후보 기준: 구간 가중 평균 0.30 이상(미보정).',
+        ),
+        if ((result!['verifiedCount'] as int? ?? 0) == 0)
+          const Text('AI가 뒷받침하는 짖음 후보가 없습니다. 감정 해석을 보류합니다.'),
+      ],
     );
   }
 }

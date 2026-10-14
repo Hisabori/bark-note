@@ -7,6 +7,8 @@ on:
       - 'lib/**'
       - 'ios/**'
       - 'pubspec.*'
+      - 'assets/**'
+      - 'tool/**'
       - '.github/workflows/ipa.yml'
 permissions:
   contents: read
@@ -21,6 +23,12 @@ jobs:
           flutter-version: '3.47.7'
           channel: stable
           cache: true
+      - name: Fetch pinned pretrained model
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 'https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/audio_classification/android/lite-model_yamnet_classification_tflite_1.tflite' -o assets/models/yamnet.tflite
+          echo '10c95ea3eb9a7bb4cb8bddf6feb023250381008177ac162ce169694d05c317de  assets/models/yamnet.tflite' | shasum -a 256 --check
       - name: Resolve and verify
         run: |
           flutter --version
@@ -28,6 +36,7 @@ jobs:
           flutter analyze
           flutter test
           dart tool/check_analysis.dart
+          dart tool/check_ai.dart
       - name: Build device app without signing
         run: flutter build ios --release --no-codesign
       - name: Package unsigned IPA
@@ -38,6 +47,11 @@ jobs:
           test -d "$APP"
           test -f "$APP/Runner"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
+          test -f "$APP/Frameworks/App.framework/flutter_assets/assets/models/yamnet.tflite"
+          xcrun nm -gU "$APP/Runner" > build/ios/tflite-symbols.txt
+          while IFS= read -r symbol; do
+            grep -F " _$symbol" build/ios/tflite-symbols.txt >/dev/null
+          done < tool/ios_tflite_symbols.txt
           mkdir -p build/ipa/Payload
           ditto "$APP" build/ipa/Payload/Runner.app
           cd build/ipa
@@ -54,3 +68,4 @@ jobs:
             build/ipa/INSTALL.txt
           if-no-files-found: error
           retention-days: 7
+
