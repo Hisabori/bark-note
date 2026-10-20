@@ -34,6 +34,8 @@ jobs:
         run: |
           gem install xcodeproj --no-document --user-install
           ruby tool/add_live_activity.rb
+      - name: Typecheck Live Activity views
+        run: xcrun --sdk iphoneos swiftc -parse-as-library -typecheck -target arm64-apple-ios16.2 -sdk "$(xcrun --sdk iphoneos --show-sdk-path)" ios/LiveActivity/DepartureAttributes.swift ios/LiveActivity/DepartureWidget.swift
       - name: Resolve and verify
         run: |
           flutter --version

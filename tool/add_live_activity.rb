@@ -29,6 +29,10 @@ unless project.targets.any? { |t| t.name == 'DepartureWidget' }
   phase = app.new_copy_files_build_phase('Embed App Extensions')
   phase.dst_subfolder_spec = '13'
   phase.add_file_reference(target.product_reference).settings = {'ATTRIBUTES' => ['RemoveHeadersOnCopy']}
+  # Flutter's Thin Binary reads the final app Info.plist. Embed the extension
+  # first so Xcode's Info.plist validation cannot create a dependency cycle.
+  app.build_phases.delete(phase)
+  thin_index = app.build_phases.index { |p| p.respond_to?(:name) && p.name == 'Thin Binary' }
+  app.build_phases.insert(thin_index || 0, phase)
   project.save
 end
-
