@@ -9,6 +9,7 @@ import 'transit_api.dart';
 import 'live_plan.dart';
 import 'kakao_panel.dart';
 import 'crowd_panel.dart';
+import 'saved_route.dart';
 
 void main() => runApp(const RailApp());
 
@@ -54,6 +55,7 @@ class _HomeState extends State<Home> {
   Timer? timer;
   DateTime? reminder;
   int generation = 0;
+  List<SavedRoute> savedRoutes = [];
   @override
   void initState() {
     super.initState();
@@ -78,6 +80,14 @@ class _HomeState extends State<Home> {
         return;
       }
       final p = jsonDecode(await f.readAsString()) as Map;
+      final saved = p['savedRoutes'];
+      if (saved is List) {
+        savedRoutes = saved
+            .map(SavedRoute.parse)
+            .whereType<SavedRoute>()
+            .take(20)
+            .toList();
+      }
       station.text = p['station'] as String? ?? '';
       destination.text = p['destination'] as String? ?? '';
       apiKey.text = p['apiKey'] as String? ?? apiKey.text;
@@ -122,6 +132,7 @@ class _HomeState extends State<Home> {
         'confirmed': confirmed,
         'deadline': deadline.toUtc().toIso8601String(),
         'minutes': fields.map((c) => c.text).toList(),
+        'savedRoutes': savedRoutes.map((r) => r.toJson()).toList(),
       }),
       flush: true,
     );
@@ -143,6 +154,142 @@ class _HomeState extends State<Home> {
       buffer: nums[4]!,
     );
   }
+
+  Future<void> saveRoute() async {
+    final plan = journey;
+    if (plan == null) {
+      setState(() => message = '먼저 출발 계획의 역·목적지·이동시간을 확정해주세요.');
+      return;
+    }
+    final name = TextEditingController(
+      text: '${station.text} → ${destination.text}',
+    );
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('자주 가는 경로 저장'),
+        content: TextField(
+          controller: name,
+          maxLength: 40,
+          decoration: const InputDecoration(labelText: '경로 이름'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () {
+              if (name.text.trim().isNotEmpty)
+                Navigator.pop(context, name.text.trim());
+            },
+            child: const Text('저장'),
+          ),
+        ],
+      ),
+    );
+    // The dialog route may still be animating while its text field is mounted.
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+    name.dispose();
+    if (!mounted || result == null) return;
+    final clock = seoulClock(deadline);
+    setState(() {
+      savedRoutes.removeWhere((r) => r.name == result);
+      savedRoutes.insert(
+        0,
+        SavedRoute(
+          result,
+          station.text.trim(),
+          destination.text.trim(),
+          selectedTrain,
+          fields.map((c) => int.parse(c.text)).toList(),
+          clock.hour,
+          clock.minute,
+        ),
+      );
+      savedRoutes = savedRoutes.take(20).toList();
+      message = '경로를 저장했습니다. 같은 이름으로 저장하면 갱신됩니다.';
+    });
+    try {
+      await save();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  Future<void> applyRoute(SavedRoute route) async {
+    generation++;
+    await cancelReminder();
+    if (!mounted) return;
+    setState(() {
+      station.text = route.station;
+      destination.text = route.destination;
+      selectedTrain = route.train;
+      for (var i = 0; i < 5; i++) {
+        fields[i].text = '${route.minutes[i]}';
+      }
+      deadline = route.nextDeadline(DateTime.now().toUtc());
+      confirmed = true;
+      arrivals = [];
+      loading = false;
+      arrivalDirection = '전체';
+      message = '${route.name} 경로를 불러왔습니다. 도착 날짜와 시각을 확인하고 열차를 새로 조회하세요.';
+    });
+    try {
+      await save();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  Widget savedRouteCard() => card(
+    Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                '자주 가는 경로',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: saveRoute,
+              icon: const Icon(Icons.bookmark_add_outlined),
+              label: const Text('현재 계획 저장'),
+            ),
+          ],
+        ),
+        if (savedRoutes.isEmpty)
+          const Text('확정한 출발 계획을 저장하면 다음에도 바로 불러올 수 있어요.'),
+        for (final route in savedRoutes)
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.bookmark_outline),
+            title: Text(route.name),
+            subtitle: Text(
+              '${route.station} → ${route.destination} · 도착 ${route.hour.toString().padLeft(2, '0')}:${route.minute.toString().padLeft(2, '0')}',
+            ),
+            onTap: () => applyRoute(route),
+            trailing: IconButton(
+              tooltip: '저장 경로 삭제',
+              icon: const Icon(Icons.delete_outline),
+              onPressed: () async {
+                setState(() => savedRoutes.remove(route));
+                try {
+                  await save();
+                } catch (e) {
+                  fail(e);
+                }
+              },
+            ),
+          ),
+        if (savedRoutes.isNotEmpty)
+          const Text('오늘 시각이 지났으면 내일로 설정됩니다. 알림과 열차 정보는 새로 설정하세요.'),
+      ],
+    ),
+  );
 
   void fail(Object error) {
     if (mounted) {
@@ -437,6 +584,7 @@ class _HomeState extends State<Home> {
                 ),
               ),
               const SizedBox(height: 16),
+              savedRouteCard(),
               liveCard(plan, now),
               card(
                 Column(
