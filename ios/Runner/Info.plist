@@ -2,7 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>NSMicrophoneUsageDescription</key>
+	<key>NSAppTransportSecurity</key><dict><key>NSExceptionDomains</key><dict><key>swopenapi.seoul.go.kr</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/><key>NSIncludesSubdomains</key><false/></dict></dict></dict>
+<key>NSMicrophoneUsageDescription</key>
 	<string>강아지의 소리를 녹음하고 기기에서 분석합니다.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
@@ -30,18 +31,21 @@
 	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
-	<key>NSMicrophoneUsageDescription</key>
+	<key>NSAppTransportSecurity</key><dict><key>NSExceptionDomains</key><dict><key>swopenapi.seoul.go.kr</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/><key>NSIncludesSubdomains</key><false/></dict></dict></dict>
+<key>NSMicrophoneUsageDescription</key>
 	<string>강아지의 소리를 녹음하고 기기에서 분석합니다.</string>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<false/>
 		<key>UISceneConfigurations</key>
 		<dict>
-	<key>NSMicrophoneUsageDescription</key>
+	<key>NSAppTransportSecurity</key><dict><key>NSExceptionDomains</key><dict><key>swopenapi.seoul.go.kr</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/><key>NSIncludesSubdomains</key><false/></dict></dict></dict>
+<key>NSMicrophoneUsageDescription</key>
 	<string>강아지의 소리를 녹음하고 기기에서 분석합니다.</string>
 			<key>UIWindowSceneSessionRoleApplication</key>
 			<array>
 				<dict>
-	<key>NSMicrophoneUsageDescription</key>
+	<key>NSAppTransportSecurity</key><dict><key>NSExceptionDomains</key><dict><key>swopenapi.seoul.go.kr</key><dict><key>NSExceptionAllowsInsecureHTTPLoads</key><true/><key>NSIncludesSubdomains</key><false/></dict></dict></dict>
+<key>NSMicrophoneUsageDescription</key>
 	<string>강아지의 소리를 녹음하고 기기에서 분석합니다.</string>
 					<key>UISceneClassName</key>
 					<string>UIWindowScene</string>
