@@ -180,8 +180,9 @@ class _HomeState extends State<Home> {
           ),
           FilledButton(
             onPressed: () {
-              if (name.text.trim().isNotEmpty)
+              if (name.text.trim().isNotEmpty) {
                 Navigator.pop(context, name.text.trim());
+              }
             },
             child: const Text('저장'),
           ),

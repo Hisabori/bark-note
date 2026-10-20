@@ -27,15 +27,17 @@ class SavedRoute {
         hour > 23 ||
         minute is! int ||
         minute < 0 ||
-        minute > 59)
+        minute > 59) {
       return null;
+    }
     for (final key in ['name', 'station', 'destination', 'train']) {
       if (value[key] is! String) return null;
     }
     if ((value['name'] as String).trim().isEmpty ||
         (value['station'] as String).trim().isEmpty ||
-        (value['destination'] as String).trim().isEmpty)
+        (value['destination'] as String).trim().isEmpty) {
       return null;
+    }
     return SavedRoute(
       value['name'],
       value['station'],
