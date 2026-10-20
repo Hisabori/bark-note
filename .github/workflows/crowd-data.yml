@@ -12,3 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python3 tool/fetch_crowd.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Official-Crowd-20260630
+          path: crowd-artifact/
+          if-no-files-found: error

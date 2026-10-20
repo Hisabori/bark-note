@@ -1,9 +1,14 @@
-import urllib.request, urllib.parse, json
-base='https://www.data.go.kr'
-q={'publicDataPk':'15071311','publicDataDetailPk':'uddi:ec6e85c3-f01a-415d-8705-e20650f1be84','atchFileId':'','fileDetailSn':'1','publicDataTyCode':'PR0051'}
-raw=urllib.request.urlopen(base+'/tcs/dss/selectFileDataDownload.do?'+urllib.parse.urlencode(q),timeout=25).read().decode()
-print('METADATA',raw)
-text=urllib.request.urlopen(base+'/js/biz/cmm/cmm/script_cmmFunction.js',timeout=25).read().decode('utf-8')
-i=text.find('function fn_fileDataDownload')
-print(text[i:i+6500])
-
+import urllib.request, csv, io, json, pathlib, hashlib
+url='https://www.data.go.kr/cmm/cmm/fileDownload.do?atchFileId=FILE_000000003682445&fileDetailSn=1'
+data=urllib.request.urlopen(url,timeout=30).read()
+text=None
+for encoding in ['utf-8-sig','cp949']:
+    try: text=data.decode(encoding); break
+    except UnicodeDecodeError: pass
+assert text and '<html' not in text[:200].lower(), 'Dataset download did not return CSV'
+rows=list(csv.reader(io.StringIO(text)))
+assert len(rows)>1000, len(rows)
+print('CSV rows:',len(rows),'columns:',rows[0]); print('FIRST',rows[1][:8])
+out=pathlib.Path('crowd-artifact');out.mkdir(exist_ok=True)
+(out/'crowd-original.csv').write_bytes(data)
+(out/'crowd.json').write_text(json.dumps({'source':'https://www.data.go.kr/data/15071311/fileData.do','asOf':'2026-06-30','sha256':hashlib.sha256(data).hexdigest(),'headers':rows[0],'rows':rows[1:]},ensure_ascii=False,separators=(',',':')),encoding='utf-8')
