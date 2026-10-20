@@ -1,29 +1,25 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path_provider/path_provider.dart';
-import 'package:record/record.dart';
-import 'analyzer.dart';
-import 'emotion.dart';
-import 'bark_model.dart';
-import 'bark_result.dart';
+import 'planner.dart';
+import 'transit_api.dart';
+import 'live_plan.dart';
 
-void main() => runApp(const BarkApp());
+void main() => runApp(const RailApp());
 
-class BarkApp extends StatelessWidget {
-  const BarkApp({super.key});
+class RailApp extends StatelessWidget {
+  const RailApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
-    title: 'Bark Note',
+    title: '나갈때',
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff296b56)),
-      scaffoldBackgroundColor: const Color(0xfff5f4ee),
+      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff20695c)),
+      scaffoldBackgroundColor: const Color(0xfff4f6f3),
     ),
     home: const Home(),
   );
@@ -35,569 +31,921 @@ class Home extends StatefulWidget {
   State<Home> createState() => _HomeState();
 }
 
-class _HomeState extends State<Home> with WidgetsBindingObserver {
-  final recorder = AudioRecorder();
-  final note = TextEditingController();
-  List<Map<String, dynamic>> history = [];
-  Map<String, dynamic>? result;
-  String emotionContext = 'unknown';
-  bool recording = false, busy = false;
-  int seconds = 0;
+class _HomeState extends State<Home> {
+  static const alerts = MethodChannel('com.railtime/alerts');
+  final station = TextEditingController(),
+      destination = TextEditingController(),
+      server = TextEditingController(),
+      apiKey = TextEditingController(
+        text: const String.fromEnvironment('SEOUL_API_KEY'),
+      ),
+      line = TextEditingController(),
+      direction = TextEditingController();
+  final fields = List.generate(5, (_) => TextEditingController());
+  final labels = ['출발지 → 승강장', '열차 이동 + 환승', '예상 열차 대기', '도착역 → 목적지', '추가 여유'];
+  int tab = 0;
+  bool confirmed = false, loading = false;
+  String message = '';
+  String day = 'weekday', arrivalDirection = '전체', selectedTrain = '';
+  DateTime deadline = DateTime.now().toUtc().add(const Duration(minutes: 90));
+  List<Map<String, dynamic>> arrivals = [];
+  Map<String, dynamic>? crowd;
+  List<CrowdSlot> slots = [];
   Timer? timer;
-  String? recordingPath;
-  String status = '조용한 곳에서 강아지 가까이에 놓아주세요.';
+  DateTime? reminder;
+  int generation = 0;
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
-    load();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused && recording) {
-      stop();
+    for (int i = 0; i < 5; i++) {
+      fields[i].text = ['10', '30', '5', '5', '5'][i];
     }
+    final s = seoulClock(DateTime.now());
+    day = s.weekday == 7
+        ? 'sunday'
+        : s.weekday == 6
+        ? 'saturday'
+        : 'weekday';
+    load();
+    loadReminder();
+    timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
   }
 
-  Future<File> store() async =>
-      File('${(await getApplicationDocumentsDirectory()).path}/history.json');
+  Future<File> prefs() async =>
+      File('${(await getApplicationDocumentsDirectory()).path}/rail-time.json');
   Future<void> load() async {
     try {
-      final f = await store();
-      if (await f.exists()) {
-        final h = (jsonDecode(await f.readAsString()) as List)
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
-        if (mounted) {
-          setState(() => history = h);
-        }
-      }
-    } catch (_) {
-      if (mounted) {
-        setState(() => status = '이전 기록을 읽지 못했습니다. 새 분석은 가능합니다.');
-      }
-    }
-  }
-
-  Future<void> persist() async {
-    final f = await store();
-    final tmp = File('${f.path}.tmp');
-    await tmp.writeAsString(jsonEncode(history), flush: true);
-    await tmp.rename(f.path);
-  }
-
-  void error(Object e) {
-    if (mounted) {
-      setState(() {
-        busy = false;
-        status = e.toString().replaceFirst('FormatException: ', '');
-      });
-    }
-  }
-
-  Future<void> start() async {
-    setState(() => busy = true);
-    try {
-      if (!await recorder.hasPermission()) {
-        throw Exception('설정에서 마이크 사용 권한을 허용해주세요.');
-      }
-      recordingPath =
-          '${(await getTemporaryDirectory()).path}/bark-${DateTime.now().millisecondsSinceEpoch}.wav';
-      await recorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.wav,
-          sampleRate: 16000,
-          numChannels: 1,
-        ),
-        path: recordingPath!,
-      );
-      if (!mounted) {
+      final f = await prefs();
+      if (!await f.exists()) {
         return;
       }
-      setState(() {
-        recording = true;
-        busy = false;
-        seconds = 0;
-        status = '녹음 중 · 최대 60초';
-      });
-      timer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (!mounted) {
-          return;
+      final p = jsonDecode(await f.readAsString()) as Map;
+      station.text = p['station'] as String? ?? '';
+      destination.text = p['destination'] as String? ?? '';
+      server.text = p['server'] as String? ?? '';
+      apiKey.text = p['apiKey'] as String? ?? apiKey.text;
+      line.text = p['line'] as String? ?? '';
+      direction.text = p['direction'] as String? ?? '';
+      selectedTrain = p['selectedTrain'] as String? ?? '';
+      final savedDeadline = DateTime.tryParse(p['deadline'] as String? ?? '');
+      if (savedDeadline != null && savedDeadline.isAfter(DateTime.now())) {
+        deadline = savedDeadline;
+      }
+      final values = p['minutes'];
+      if (values is List && values.length == 5) {
+        for (int i = 0; i < 5; i++) {
+          fields[i].text = values[i].toString();
         }
-        setState(() => seconds++);
-        if (seconds >= 60) {
-          stop();
-        }
-      });
-    } catch (e) {
-      error(e);
-    }
-  }
-
-  Future<void> stop() async {
-    if (!recording || busy) {
-      return;
-    }
-    timer?.cancel();
-    setState(() {
-      busy = true;
-      recording = false;
-    });
-    try {
-      final path = await recorder.stop();
-      if (path == null) {
-        throw Exception('녹음 파일을 찾지 못했습니다.');
       }
-      await analyze(path, '직접 녹음');
-    } catch (e) {
-      error(e);
-    } finally {
-      final p = recordingPath;
-      if (p != null && await File(p).exists()) {
-        await File(p).delete();
-      }
-    }
-  }
-
-  Future<void> pick() async {
-    setState(() => busy = true);
-    try {
-      final picked = await FilePicker.pickFile(
-        type: FileType.custom,
-        allowedExtensions: ['wav'],
-      );
-      if (picked != null && picked.path != null) {
-        await analyze(picked.path!, picked.name);
-      }
-    } catch (e) {
-      error(e);
-    } finally {
       if (mounted) {
-        setState(() => busy = false);
+        setState(() {
+          confirmed =
+              p['confirmed'] == true &&
+              savedDeadline != null &&
+              savedDeadline.isAfter(DateTime.now()) &&
+              station.text.trim().isNotEmpty &&
+              destination.text.trim().isNotEmpty;
+        });
       }
-    }
-  }
-
-  Future<void> analyze(String path, String name) async {
-    final f = File(path);
-    if (await f.length() > 60 * 1024 * 1024) {
-      throw const FormatException('60 MB 이하 WAV 파일을 선택해주세요.');
-    }
-    final bytes = await f.readAsBytes();
-    final r = await compute(analyzeWav, bytes);
-    if (mounted) {
-      setState(() => status = '사전학습 AI로 소리 종류를 분석하고 있어요…');
-    }
-    try {
-      final model = await rootBundle.load('assets/models/yamnet.tflite');
-      final ai = await compute(classifyBarks, {
-        'audio': bytes,
-        'model': model.buffer.asUint8List(
-          model.offsetInBytes,
-          model.lengthInBytes,
-        ),
-      });
-      applyBarkVerification(r, ai);
     } catch (_) {
-      r['aiError'] =
-          'AI 분석을 완료하지 못했습니다. 아래 횟수는 소리 크기로 찾은 후보이며 강아지 짖음 확인 결과가 아닙니다.';
-    }
-    r['name'] = name;
-    r['date'] = DateTime.now().toIso8601String();
-    r['note'] = '';
-    r['emotion'] = interpretEmotion(r, 'unknown');
-    if (mounted) {
-      setState(() {
-        result = r;
-        emotionContext = 'unknown';
-        note.clear();
-        busy = false;
-        status = r['aiError'] == null
-            ? '분석 완료 · 사전학습 YAMNet 적용'
-            : '기본 분석 완료 · AI 분석 실패';
-      });
+      if (mounted) {
+        setState(() => message = '이전 설정을 읽지 못했습니다. 다시 입력해주세요.');
+      }
     }
   }
 
   Future<void> save() async {
-    if (result == null) {
+    final f = await prefs();
+    await f.writeAsString(
+      jsonEncode({
+        'station': station.text,
+        'destination': destination.text,
+        'server': server.text,
+        'apiKey': apiKey.text,
+        'line': line.text,
+        'direction': direction.text,
+        'selectedTrain': selectedTrain,
+        'confirmed': confirmed,
+        'deadline': deadline.toUtc().toIso8601String(),
+        'minutes': fields.map((c) => c.text).toList(),
+      }),
+      flush: true,
+    );
+  }
+
+  Journey? get journey {
+    final nums = fields.map((c) => int.tryParse(c.text)).toList();
+    if (!confirmed ||
+        nums.any((n) => n == null || n < 0 || n > 240) ||
+        nums[1] == 0) {
+      return null;
+    }
+    return Journey(
+      deadline: deadline,
+      walkToPlatform: nums[0]!,
+      rideAndTransfer: nums[1]!,
+      wait: nums[2]!,
+      exitWalk: nums[3]!,
+      buffer: nums[4]!,
+    );
+  }
+
+  void fail(Object error) {
+    if (mounted) {
+      setState(
+        () => message = error
+            .toString()
+            .replaceFirst('Bad state: ', '')
+            .replaceFirst('FormatException: ', ''),
+      );
+    }
+  }
+
+  Future<void> targetTime() async {
+    final clock = seoulClock(deadline);
+    final now = seoulClock(DateTime.now());
+    final date = await showDatePicker(
+      context: context,
+      initialDate: clock.isBefore(now) ? now : clock,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(
+        now.year,
+        now.month,
+        now.day,
+      ).add(const Duration(days: 30)),
+    );
+    if (date == null || !mounted) {
       return;
     }
-    final entry = {
-      ...result!,
-      'note': note.text.trim(),
-      'emotion': interpretEmotion(result!, emotionContext),
-    }..remove('levels');
-    final old = [...history];
-    setState(() => history.insert(0, entry));
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: clock.hour, minute: clock.minute),
+    );
+    if (time == null || !mounted) {
+      return;
+    }
+    setState(() {
+      deadline = seoulInstant(
+        date.year,
+        date.month,
+        date.day,
+        time.hour,
+        time.minute,
+      );
+    });
+    await cancelReminder();
     try {
-      await persist();
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('기록을 저장했습니다.')));
+      await save();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  Future<void> editPlan() async {
+    final controllers = [station, destination, ...fields];
+    final before = controllers.map((c) => c.text).toList();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('내 이동시간 설정'),
+        content: SizedBox(
+          width: 400,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  '자동 길찾기 전 단계입니다. 평소 걸리는 시간을 직접 입력해주세요. 기본값은 실제 경로 정보가 아닙니다.',
+                ),
+                TextField(
+                  controller: station,
+                  decoration: const InputDecoration(labelText: '출발역 (예: 강남)'),
+                ),
+                TextField(
+                  controller: destination,
+                  decoration: const InputDecoration(labelText: '목적지'),
+                ),
+                for (int i = 0; i < 5; i++)
+                  TextField(
+                    controller: fields[i],
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      labelText: labels[i],
+                      suffixText: '분',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('취소'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('이 시간으로 계산'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
+    if (ok != true) {
+      for (int i = 0; i < controllers.length; i++) {
+        controllers[i].text = before[i];
+      }
+      return;
+    }
+    await cancelReminder();
+    setState(() {
+      confirmed =
+          ok == true &&
+          station.text.trim().isNotEmpty &&
+          destination.text.trim().isNotEmpty;
+      crowd = null;
+      slots = [];
+      arrivals = [];
+      selectedTrain = '';
+      generation++;
+    });
+    if (ok == true) {
+      if (journey == null) {
+        fail('역·목적지와 0~240분의 이동시간을 확인해주세요. 열차 이동은 1분 이상이어야 합니다.');
+      } else {
+        try {
+          await save();
+        } catch (e) {
+          fail(e);
+        }
+      }
+    }
+  }
+
+  Future<void> fetchArrivals() async {
+    if (loading) {
+      return;
+    }
+    if (apiKey.text.trim().isEmpty) {
+      fail('설정에서 서울시 지하철 인증키를 입력해주세요.');
+      return;
+    }
+    if (station.text.trim().isEmpty) {
+      fail('먼저 출발역을 입력해주세요.');
+      return;
+    }
+    final token = ++generation;
+    setState(() {
+      loading = true;
+      message = '';
+      arrivals = [];
+    });
+    try {
+      final value = await directArrivals(apiKey.text, station.text);
+      if (mounted && token == generation) {
+        setState(
+          () => arrivals = (value['arrivals'] as List)
+              .map((e) => Map<String, dynamic>.from(e))
+              .toList(),
+        );
+        if (arrivals.isEmpty) {
+          fail('현재 도착정보가 없습니다. 운행 종료 여부를 확인해주세요.');
+        }
       }
     } catch (e) {
-      setState(() => history = old);
-      error(e);
+      fail(e);
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+  }
+
+  Future<void> fetchCrowd() async {
+    if (loading) {
+      return;
+    }
+    if (server.text.trim().isEmpty) {
+      fail('설정에서 통계 데이터 서버를 연결해주세요.');
+      return;
+    }
+    if (line.text.trim().isEmpty || direction.text.trim().isEmpty) {
+      fail('설정에 혼잡도 조회 노선과 방향을 입력해주세요.');
+      return;
+    }
+    setState(() {
+      loading = true;
+      message = '';
+      slots = [];
+      crowd = null;
+    });
+    try {
+      final value = await TransitApi(server.text.trim()).get('crowd', {
+        'station': station.text.trim(),
+        'line': line.text.trim(),
+        'direction': direction.text.trim(),
+        'day': day,
+      });
+      if (value['kind'] != 'historical') {
+        throw const FormatException('통계 데이터 형식을 확인해주세요.');
+      }
+      final parsed = (value['slots'] as List)
+          .map(
+            (e) => CrowdSlot(
+              (e['minute'] as num).toInt(),
+              (e['percent'] as num).toDouble(),
+            ),
+          )
+          .toList();
+      if (parsed.any(
+            (s) =>
+                s.minute < 0 ||
+                s.minute >= 1440 ||
+                s.minute % 30 != 0 ||
+                !s.percent.isFinite ||
+                s.percent < 0,
+          ) ||
+          parsed.map((s) => s.minute).toSet().length != parsed.length) {
+        throw const FormatException('올바르지 않은 혼잡도 통계입니다.');
+      }
+      if (mounted) {
+        setState(() {
+          crowd = value;
+          slots = parsed;
+        });
+      }
+    } catch (e) {
+      fail(e);
+    } finally {
+      if (mounted) {
+        setState(() => loading = false);
+      }
+    }
+  }
+
+  Future<void> cancelReminder() async {
+    try {
+      await alerts.invokeMethod('cancel');
+      if (mounted) {
+        setState(() => reminder = null);
+      }
+    } catch (e) {
+      fail('기존 알림 취소를 확인하지 못했습니다: $e');
+    }
+  }
+
+  Future<void> loadReminder() async {
+    try {
+      final epoch = await alerts.invokeMethod<num>('status');
+      if (mounted &&
+          epoch != null &&
+          epoch > DateTime.now().millisecondsSinceEpoch) {
+        setState(
+          () => reminder = DateTime.fromMillisecondsSinceEpoch(
+            epoch.toInt(),
+            isUtc: true,
+          ),
+        );
+      }
+    } catch (_) {
+      /* Native status is optional while previewing the UI. */
+    }
+  }
+
+  Future<void> schedule(DateTime time) async {
+    if (!time.isAfter(DateTime.now().toUtc())) {
+      fail('이미 지난 출발 시각입니다. 목표 시각을 변경해주세요.');
+      return;
+    }
+    try {
+      final granted = await alerts.invokeMethod<bool>('schedule', {
+        'epoch': time.millisecondsSinceEpoch,
+        'title': '이제 나갈 시간이에요',
+        'body': '${destination.text}까지 여유 있게 도착하려면 출발해주세요. 입력한 이동시간 기준입니다.',
+      });
+      if (granted != true) {
+        fail('알림 권한이 허용되지 않았습니다. 기기 설정을 확인해주세요.');
+        return;
+      }
+      if (mounted) {
+        setState(() => reminder = time);
+      }
+    } catch (e) {
+      fail('알림을 예약하지 못했습니다. $e');
     }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
     timer?.cancel();
-    recorder.dispose();
-    note.dispose();
+    for (final c in [
+      station,
+      destination,
+      server,
+      apiKey,
+      line,
+      direction,
+      ...fields,
+    ]) {
+      c.dispose();
+    }
     super.dispose();
   }
 
-  Widget panel(Widget child) => Card(
+  Widget card(Widget child) => Card(
     elevation: 0,
     color: Colors.white,
     child: Padding(padding: const EdgeInsets.all(20), child: child),
   );
-  Widget metric(String title, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(title),
-      Text(
-        value,
-        style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
-      ),
-    ],
+  Widget title(String value) => Padding(
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Text(
+      value,
+      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
+    ),
   );
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text('Bark Note'),
-      backgroundColor: Colors.transparent,
-    ),
-    body: SafeArea(
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
-        children: [
-          const Text(
-            '우리 강아지의\n소리를 기록해요.',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-            ),
+  Widget build(BuildContext context) {
+    final plan = journey;
+    final now = DateTime.now().toUtc();
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('나갈때'),
+        actions: [
+          IconButton(
+            onPressed: editPlan,
+            icon: const Icon(Icons.edit_location_alt_outlined),
+            tooltip: '이동 계획 입력',
           ),
-          const SizedBox(height: 12),
-          const Text('소리의 패턴을 살펴보고, 당시 상황을 함께 남겨보세요.'),
-          const SizedBox(height: 20),
-          panel(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Icon(
-                  recording ? Icons.graphic_eq : Icons.pets,
-                  size: 56,
-                  color: const Color(0xff296b56),
-                ),
-                const SizedBox(height: 16),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: tab,
+        onDestinationSelected: (v) => setState(() => tab = v),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.schedule), label: '출발 플랜'),
+          NavigationDestination(
+            icon: Icon(Icons.train_outlined),
+            label: '실시간 열차',
+          ),
+          NavigationDestination(icon: Icon(Icons.tune), label: '설정'),
+        ],
+      ),
+      body: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+          children: [
+            if (loading) const LinearProgressIndicator(),
+            if (message.isNotEmpty)
+              card(
                 Text(
-                  recording ? '$seconds초 녹음 중' : '소리 분석 시작',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  message,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
                 ),
-                const SizedBox(height: 12),
-                FilledButton.icon(
-                  onPressed: busy
-                      ? null
-                      : recording
-                      ? stop
-                      : start,
-                  icon: Icon(recording ? Icons.stop : Icons.mic),
-                  label: Text(recording ? '녹음 종료 & 분석' : '60초 녹음하기'),
-                ),
-                OutlinedButton.icon(
-                  onPressed: busy || recording ? null : pick,
-                  icon: const Icon(Icons.audio_file),
-                  label: const Text('WAV 파일 가져오기'),
-                ),
-                if (busy) const LinearProgressIndicator(),
-                const SizedBox(height: 8),
-                Text(status, textAlign: TextAlign.center),
-              ],
-            ),
-          ),
-          if (result != null)
-            panel(
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    '분석 결과',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 16),
-                  emotionPanel(),
-                  const SizedBox(height: 16),
-                  Wrap(
-                    spacing: 24,
-                    runSpacing: 12,
-                    children: [
-                      metric('소리 크기 후보', '${result!['count']}회'),
-                      if (result!['verifiedCount'] != null)
-                        metric('AI 짖음 후보', '${result!['verifiedCount']}회'),
-                      metric(
-                        '전체 길이',
-                        '${(result!['duration'] as num).toStringAsFixed(1)}초',
-                      ),
-                      metric(
-                        '분당 후보',
-                        (result!['perMinute'] as num).toStringAsFixed(1),
-                      ),
-                      metric(
-                        '최대 프레임 음량',
-                        '${(result!['peak'] as num).toStringAsFixed(1)} dBFS',
-                      ),
-                    ],
-                  ),
-                  if (result!['levels'] != null)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 20),
-                      child: SizedBox(
-                        height: 90,
-                        width: double.infinity,
-                        child: CustomPaint(
-                          painter: WavePainter(
-                            List<double>.from(result!['levels']),
-                            (result!['threshold'] as num).toDouble(),
-                          ),
-                        ),
-                      ),
-                    ),
-                  const Text('초록색: 음량 기준을 넘은 소리 · AI 확인 여부와는 별개입니다.'),
-                  const SizedBox(height: 12),
-                  aiPanel(),
-                  const SizedBox(height: 12),
-                  Text(
-                    (result!['count'] as int) == 0
-                        ? '짖음 후보가 감지되지 않았습니다. 거리나 주변 소음을 확인해보세요.'
-                        : '짧은 소리가 ${result!['count']}회 감지되었습니다. 당시 상황과 함께 확인해주세요.',
-                  ),
-                  const Divider(height: 28),
-                  ...((result!['segments'] as List)
-                      .take(30)
-                      .map(
-                        (s) => Text(
-                          '${(s['start'] as num).toStringAsFixed(2)}초 — ${(s['end'] as num).toStringAsFixed(2)}초',
-                        ),
-                      )),
-                  if ((result!['segments'] as List).length > 30)
-                    const Text('처음 30구간만 표시합니다. 전체 구간은 기록에 저장됩니다.'),
-                  TextField(
-                    controller: note,
-                    maxLength: 500,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: '상황 메모',
-                      hintText: '예: 초인종이 울렸을 때, 산책 전',
-                    ),
-                  ),
-                  FilledButton(
-                    onPressed: busy || recording ? null : save,
-                    child: const Text('이 분석 저장하기'),
-                  ),
-                ],
               ),
-            ),
-          panel(
-            const Text(
-              '분석 안내\n\n사전학습된 Google YAMNet으로 소리 종류를 분석합니다. AI 짖음 후보는 음량으로 찾은 구간 중 모델의 짖음 점수가 기준을 넘은 구간입니다. 약 1초 단위의 분석이라 다른 소리가 섞이거나 조용한 짖음을 놓칠 수 있습니다. 감정 학습 모델은 포함하지 않습니다. 감정 번역은 상황 기반 추정입니다. 모델은 기기에 포함되어 녹음을 서버에 보내지 않습니다.',
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.all(12),
-            child: Text(
-              '지난 기록',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-            ),
-          ),
-          if (history.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(12),
-              child: Text('저장된 기록이 없습니다.'),
-            ),
-          ...history.asMap().entries.map(
-            (e) => Card(
-              child: ListTile(
-                title: Text('${e.value['count']}회 · ${e.value['name']}'),
-                subtitle: Text(
-                  '${e.value['date'].toString().substring(0, 16).replaceAll('T', ' ')}\n${e.value['note']}',
+            if (tab == 0) ...[
+              const Text(
+                '덜 붐비게,\n늦지 않게.',
+                style: TextStyle(
+                  fontSize: 34,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
                 ),
-                isThreeLine: true,
-                onTap: recording || busy
-                    ? null
-                    : () => setState(() {
-                        result = {...e.value};
-                        final saved = e.value['emotion'];
-                        emotionContext =
-                            saved is Map &&
-                                emotionContexts.containsKey(saved['context'])
-                            ? saved['context'] as String
-                            : 'unknown';
-                        note.text = e.value['note'] as String;
-                      }),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('이 기록을 삭제할까요?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('취소'),
+              ),
+              const SizedBox(height: 16),
+              card(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    title('나갈 시간'),
+                    if (plan == null) ...[
+                      const Text('출발역·목적지와 평소 이동시간을 입력해 첫 플랜을 만들어보세요.'),
+                      const SizedBox(height: 12),
+                      FilledButton.icon(
+                        onPressed: editPlan,
+                        icon: const Icon(Icons.add),
+                        label: const Text('이동 계획 만들기'),
+                      ),
+                    ] else ...[
+                      Text('${station.text} → ${destination.text}'),
+                      Text(
+                        hm(plan.leaveAt),
+                        style: const TextStyle(
+                          fontSize: 54,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xff20695c),
+                        ),
+                      ),
+                      Text(
+                        plan.leaveAt.isBefore(now)
+                            ? '권장 출발 시각이 지났습니다. 이동 계획을 확인해주세요.'
+                            : '약 ${plan.leaveAt.difference(now).inMinutes}분 뒤 출발',
+                      ),
+                      const SizedBox(height: 10),
+                      const Text('입력한 이동시간 기준 · 운행 지연/막차/환승 가능 여부는 반영하지 않습니다.'),
+                      const Divider(height: 28),
+                      Text('목표 도착 ${hm(deadline)} · 총 ${plan.total}분'),
+                      Text(
+                        '도보 ${plan.walkToPlatform} + 이동/환승 ${plan.rideAndTransfer} + 대기 ${plan.wait} + 도착 도보 ${plan.exitWalk} + 여유 ${plan.buffer}분',
+                      ),
+                      const SizedBox(height: 12),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          OutlinedButton(
+                            onPressed: targetTime,
+                            child: const Text('목표 도착 변경'),
                           ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('삭제'),
+                          FilledButton.icon(
+                            onPressed: () => schedule(plan.leaveAt),
+                            icon: const Icon(Icons.notifications_outlined),
+                            label: const Text('출발 알림 예약'),
                           ),
                         ],
                       ),
-                    );
-                    if (ok == true && mounted) {
-                      final old = [...history];
-                      setState(() => history.removeAt(e.key));
-                      try {
-                        await persist();
-                      } catch (err) {
-                        setState(() => history = old);
-                        error(err);
-                      }
-                    }
-                  },
+                    ],
+                    if (reminder != null) ...[
+                      const Divider(),
+                      Text('${hm(reminder!)} 출발 알림 예약됨 · 시스템에 따라 지연될 수 있습니다.'),
+                      TextButton(
+                        onPressed: cancelReminder,
+                        child: const Text('알림 취소'),
+                      ),
+                    ],
+                  ],
                 ),
               ),
-            ),
-          ),
-        ],
+              card(
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    title('평소 덜 붐비는 시간'),
+                    const Text(
+                      '출발역을 지나는 열차의 30분 평균 통계입니다. 실시간 칸별 혼잡도나 좌석 보장은 아닙니다.',
+                    ),
+                    DropdownButton<String>(
+                      value: day,
+                      isExpanded: true,
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'weekday',
+                          child: Text('평일 통계'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'saturday',
+                          child: Text('토요일 통계'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'sunday',
+                          child: Text('일요일·공휴일 통계'),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v != null) {
+                          setState(() {
+                            day = v;
+                            slots = [];
+                            crowd = null;
+                          });
+                        }
+                      },
+                    ),
+                    const Text('공휴일은 직접 선택해주세요. 오늘 서울 날짜의 후보만 비교합니다.'),
+                    OutlinedButton(
+                      onPressed: loading ? null : fetchCrowd,
+                      child: const Text('혼잡도 통계 조회'),
+                    ),
+                    if (crowd == null)
+                      const Text(
+                        '통계 미연결 · 데이터를 받으면 도착 시각을 지킬 수 있는 출발 후보 중 덜 붐비는 시간을 비교합니다.',
+                      ),
+                    if (crowd != null) ...[
+                      Text(
+                        '통계 기준일 ${crowd!['asOf']} · ${line.text} ${direction.text}',
+                      ),
+                      Text(
+                        '출처 ${crowd!['source']}',
+                        style: const TextStyle(fontSize: 12),
+                      ),
+                      if (plan != null) ..._options(plan, now),
+                      const Divider(),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 8,
+                        children: slots
+                            .map(
+                              (s) => Chip(
+                                label: Text(
+                                  '${(s.minute ~/ 60).toString().padLeft(2, '0')}:${(s.minute % 60).toString().padLeft(2, '0')}  ${s.percent.toStringAsFixed(1)}%',
+                                ),
+                              ),
+                            )
+                            .toList(),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+            if (tab == 0 && plan != null) liveCard(plan, now),
+            if (tab == 1) ...[
+              title('지금 오는 열차'),
+              TextField(
+                controller: station,
+                decoration: const InputDecoration(
+                  labelText: '조회할 역 이름',
+                  hintText: '서울, 강남 등 (역 접미사 제외)',
+                ),
+                onChanged: (_) => setState(() {
+                  arrivals = [];
+                  selectedTrain = '';
+                  generation++;
+                  confirmed = false;
+                }),
+              ),
+              const SizedBox(height: 12),
+              FilledButton.icon(
+                onPressed: loading ? null : fetchArrivals,
+                icon: const Icon(Icons.refresh),
+                label: const Text('실시간 도착정보 조회'),
+              ),
+              if (arrivals.isEmpty)
+                card(
+                  const Text(
+                    '아직 조회된 열차가 없습니다. 서버 미연결이나 제공기관 오류일 때 도착정보를 만들어 표시하지 않습니다.',
+                  ),
+                ),
+              if (arrivals.isNotEmpty) ...[
+                const Text('출발 계획에 사용할 노선·방향을 열차 카드에서 선택하세요.'),
+                Wrap(
+                  spacing: 6,
+                  children:
+                      {'전체', ...arrivals.map((e) => e['direction'] as String)}
+                          .map(
+                            (v) => ChoiceChip(
+                              label: Text(v),
+                              selected: arrivalDirection == v,
+                              onSelected: (_) =>
+                                  setState(() => arrivalDirection = v),
+                            ),
+                          )
+                          .toList(),
+                ),
+                ...arrivals
+                    .where(
+                      (a) =>
+                          arrivalDirection == '전체' ||
+                          a['direction'] == arrivalDirection,
+                    )
+                    .map((a) {
+                      final t = DateTime.tryParse(a['eta'] as String? ?? '');
+                      final received = DateTime.tryParse(
+                        a['receivedAt'] as String? ?? '',
+                      );
+                      final fresh =
+                          received != null &&
+                          now.difference(received).inSeconds <= 120 &&
+                          a['fresh'] == true;
+                      final seconds = t?.difference(now).inSeconds;
+                      return card(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${_lineName(a['line'].toString())} · ${a['direction']}',
+                            ),
+                            Text(
+                              a['destination'].toString(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
+                              ),
+                            ),
+                            Text(
+                              fresh && seconds != null && seconds > 0
+                                  ? '약 ${seconds ~/ 60}분 ${seconds % 60}초 뒤'
+                                  : a['message'].toString(),
+                              style: const TextStyle(fontSize: 24),
+                            ),
+                            Text(
+                              received == null
+                                  ? '정보 시각 미제공'
+                                  : '제공기관 갱신 ${hm(received)}${fresh ? '' : ' · 오래된 정보 (예상시각 사용 안 함)'}',
+                            ),
+                            const Text(
+                              '종착역·급행 여부를 확인하고 탑승해주세요.',
+                              style: TextStyle(fontSize: 12),
+                            ),
+                            TextButton.icon(
+                              onPressed: () async {
+                                setState(() {
+                                  selectedTrain =
+                                      '${a['line']}|${a['direction']}|${a['terminal']}';
+                                  tab = 0;
+                                });
+                                try {
+                                  await save();
+                                } catch (e) {
+                                  fail(e);
+                                }
+                              },
+                              icon: const Icon(Icons.route),
+                              label: const Text('이 노선·방향으로 출발 계산'),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+              ],
+            ],
+            if (tab == 2) ...[
+              title('휴대폰에서 직접 조회'),
+              TextField(
+                controller: apiKey,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(labelText: '서울시 지하철 인증키'),
+              ),
+              const Text(
+                '실시간 열차는 휴대폰에서 서울시 API로 직접 조회합니다. 인터넷 연결이 필요합니다. 인증키는 이 기기에 저장됩니다. 아래 서버는 혼잡도 통계용 선택 설정입니다.',
+              ),
+              TextField(
+                controller: server,
+                keyboardType: TextInputType.url,
+                decoration: const InputDecoration(
+                  labelText: '정보 서버 주소',
+                  hintText: 'https://your-transit-api.example',
+                ),
+              ),
+              TextField(
+                controller: line,
+                decoration: const InputDecoration(
+                  labelText: '혼잡도 통계의 노선 값',
+                  hintText: '통계 데이터의 노선과 정확히 일치하게 입력',
+                ),
+              ),
+              TextField(
+                controller: direction,
+                decoration: const InputDecoration(
+                  labelText: '혼잡도 통계의 방향 값',
+                  hintText: '내선/외선 또는 상선/하선 등 원본과 일치',
+                ),
+              ),
+              const SizedBox(height: 16),
+              FilledButton(
+                onPressed: () async {
+                  try {
+                    if (server.text.trim().isNotEmpty) {
+                      TransitApi(server.text.trim());
+                    }
+                    await cancelReminder();
+                    await save();
+                    if (mounted) {
+                      setState(() {
+                        arrivals = [];
+                        slots = [];
+                        crowd = null;
+                        generation++;
+                        message = '설정을 저장했습니다.';
+                      });
+                    }
+                  } catch (e) {
+                    fail(e);
+                  }
+                },
+                child: const Text('설정 저장'),
+              ),
+              card(
+                const Text(
+                  '지원 범위\n\n수도권 데이터 연결용 첫 버전입니다. 실제 제공 범위는 운영기관 API에 따릅니다.\n\n출발 계산: 직접 입력한 이동시간 기준\n혼잡도 추천: 데이터가 연결된 역의 과거 30분 평균 기준\n칸별 실시간 혼잡도·자동 길찾기·막차 보장: 아직 제공하지 않습니다.\n\n출발 알림은 저장한 시각의 로컬 알림이며 실시간 운행을 백그라운드에서 재조회하지 않습니다.',
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
-    ),
-  );
+    );
+  }
 
-  Widget emotionPanel() {
-    final interpretation = interpretEmotion(result!, emotionContext);
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xffedf4ef),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Column(
+  Widget liveCard(Journey plan, DateTime now) {
+    final matching = arrivals
+        .where(
+          (a) =>
+              '${a['line']}|${a['direction']}|${a['terminal']}' ==
+              selectedTrain,
+        )
+        .toList();
+    matching.sort(
+      (a, b) =>
+          (a['eta'] as String? ?? 'z').compareTo(b['eta'] as String? ?? 'z'),
+    );
+    final candidates = matching
+        .map((a) => livePlan(a, plan, now))
+        .whereType<LivePlan>()
+        .where((p) => p.canCatch)
+        .toList();
+    final chosen = candidates.isEmpty ? null : candidates.first;
+    final selected = selectedTrain.split('|');
+    return card(
+      Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '감정 번역 · 추정',
-            style: TextStyle(fontSize: 21, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text('당시 상황을 선택해주세요'),
-          Wrap(
-            spacing: 6,
-            children: emotionContexts.entries
-                .map(
-                  (e) => ChoiceChip(
-                    label: Text(e.value),
-                    selected: emotionContext == e.key,
-                    onSelected: busy || recording
-                        ? null
-                        : (_) => setState(() => emotionContext = e.key),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            interpretation['label'] as String,
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          Text(
-            '“${interpretation['phrase']}”',
-            style: const TextStyle(fontSize: 23, height: 1.5),
-          ),
-          const Text('이 문장은 가능한 상태를 쉽게 표현한 예시입니다.'),
-          const SizedBox(height: 12),
-          if ((interpretation['alternatives'] as List).isNotEmpty)
+          title('지금 나가면 탈 수 있을까?'),
+          if (selectedTrain.isEmpty)
+            const Text('실시간 열차에서 탈 노선·방향·종착역을 선택해주세요.')
+          else ...[
             Text(
-              '다른 가능성: ${(interpretation['alternatives'] as List).join(' / ')}',
+              '${_lineName(selected.first)} · ${selected[1]} · ${selected[2]}행',
             ),
+            if (chosen == null)
+              const Text('현재 걸어서 탈 수 있는 열차 예측이 없습니다. 새로 조회하거나 다음 열차를 확인해주세요.')
+            else ...[
+              Text(
+                '${hm(chosen.leaveAt)}까지 출발',
+                style: const TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              Text(
+                '약 ${chosen.leaveAt.difference(now).inSeconds ~/ 60}분 뒤 출발 · 예상 도착 ${hm(chosen.arriveAt)}',
+              ),
+              Text(
+                chosen.onTime
+                    ? '입력한 여유시간을 포함해 목표 도착 가능'
+                    : '이 열차는 목표 도착 여유가 부족합니다.',
+              ),
+            ],
+          ],
           const SizedBox(height: 8),
-          ...((interpretation['reasons'] as List).map((r) => Text('• $r'))),
-          const SizedBox(height: 8),
-          Text(interpretation['observe'] as String),
-          const SizedBox(height: 8),
-          Text(interpretation['certainty'] as String),
+          const Text(
+            '승강장 도보 + 탑승 여유 1분 반영. 이동·환승 시간은 직접 입력한 값이며, 종착역 이후 경로와 급행 정차 여부는 직접 확인해주세요.',
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              OutlinedButton.icon(
+                onPressed: loading ? null : fetchArrivals,
+                icon: const Icon(Icons.refresh),
+                label: const Text('현재 열차로 다시 계산'),
+              ),
+              TextButton(
+                onPressed: () => setState(() => tab = 1),
+                child: const Text('탈 열차 선택'),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  Widget aiPanel() {
-    final ai = result!['ai'];
-    if (ai is! Map) {
-      return Text(
-        result!['aiError'] as String? ??
-            '이 기록은 AI 모델 적용 전 분석입니다. 새로 녹음하거나 파일을 다시 분석해주세요.',
-      );
+  List<Widget> _options(Journey plan, DateTime now) {
+    final options = lessCrowdedOptions(plan, now, slots);
+    if (options.isEmpty) {
+      return [const Text('조건에 맞는 비교 후보가 없습니다. 데이터·목표 도착 시각을 확인해주세요.')];
     }
-    String score(String key) => (ai[key] as num).toStringAsFixed(3);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '사전학습 AI · Google YAMNet',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        Text(
-          '최대 모델 점수: 짖음 ${score('barkPeak')} / 강아지 소리 ${score('dogPeak')} / 말소리 ${score('speechPeak')}',
-        ),
-        const Text(
-          '0–1의 모델 점수이며 정확도·감정 확률이 아닙니다. AI 짖음 후보 기준: 구간 가중 평균 0.30 이상(미보정).',
-        ),
-        if ((result!['verifiedCount'] as int? ?? 0) == 0)
-          const Text('AI가 뒷받침하는 짖음 후보가 없습니다. 감정 해석을 보류합니다.'),
-      ],
-    );
-  }
-}
-
-class WavePainter extends CustomPainter {
-  WavePainter(this.levels, this.threshold);
-  final List<double> levels;
-  final double threshold;
-  @override
-  void paint(Canvas canvas, Size size) {
-    final p = Paint()..strokeWidth = 2;
-    for (int x = 0; x < size.width.toInt(); x += 3) {
-      final v =
-          levels[(x / size.width * levels.length).floor().clamp(
-            0,
-            levels.length - 1,
-          )];
-      p.color = v > threshold
-          ? const Color(0xff296b56)
-          : const Color(0xffcbd5cd);
-      final h = ((v + 60) / 60).clamp(.03, 1) * size.height;
-      canvas.drawLine(
-        Offset(x.toDouble(), (size.height - h) / 2),
-        Offset(x.toDouble(), (size.height + h) / 2),
-        p,
-      );
-    }
+    return options
+        .map(
+          (o) => ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(
+              '${hm(o.depart)} 출발 · 탑승 시간대 평균 ${o.crowd.toStringAsFixed(1)}%',
+            ),
+            subtitle: Text('입력시간 기준 ${hm(plan.arrivalAt(o.depart))} 도착'),
+            trailing: IconButton(
+              tooltip: '이 시각으로 알림 예약',
+              icon: const Icon(Icons.notifications_active_outlined),
+              onPressed: () => schedule(o.depart),
+            ),
+          ),
+        )
+        .toList();
   }
 
-  @override
-  bool shouldRepaint(covariant WavePainter oldDelegate) =>
-      oldDelegate.levels != levels;
+  String _lineName(String value) =>
+      const {
+        '1001': '1호선',
+        '1002': '2호선',
+        '1003': '3호선',
+        '1004': '4호선',
+        '1005': '5호선',
+        '1006': '6호선',
+        '1007': '7호선',
+        '1008': '8호선',
+        '1009': '9호선',
+        '1065': '공항철도',
+        '1075': '수인분당선',
+        '1077': '신분당선',
+        '1063': '경의중앙선',
+        '1067': '경춘선',
+      }[value] ??
+      '노선 $value';
 }

@@ -1,56 +1,62 @@
-import 'dart:math';
-import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:bark_note/analyzer.dart';
-
-Uint8List wav({bool silent = false, bool stereo = false}) {
-  const rate = 16000;
-  final ch = stereo ? 2 : 1;
-  final b = Uint8List(44 + rate * 4 * 2 * ch);
-  final d = ByteData.sublistView(b);
-  void tag(int at, String s) => b.setRange(at, at + s.length, s.codeUnits);
-  tag(0, 'RIFF');
-  d.setUint32(4, b.length - 8, Endian.little);
-  tag(8, 'WAVE');
-  tag(12, 'fmt ');
-  d.setUint32(16, 16, Endian.little);
-  d.setUint16(20, 1, Endian.little);
-  d.setUint16(22, ch, Endian.little);
-  d.setUint32(24, rate, Endian.little);
-  d.setUint32(28, rate * 2 * ch, Endian.little);
-  d.setUint16(32, 2 * ch, Endian.little);
-  d.setUint16(34, 16, Endian.little);
-  tag(36, 'data');
-  d.setUint32(40, b.length - 44, Endian.little);
-  for (int i = 0; i < rate * 4; i++) {
-    final t = i / rate;
-    final active = !silent && ((t > .5 && t < .75) || (t > 2 && t < 2.35));
-    final v = (sin(2 * pi * 600 * t) * (active ? 18000 : 0)).round();
-    for (int c = 0; c < ch; c++) {
-      d.setInt16(44 + (i * ch + c) * 2, c == 0 ? v : -v, Endian.little);
-    }
-  }
-  return b;
-}
+import 'package:rail_time/planner.dart';
 
 void main() {
-  test('Two separated bursts detected', () {
-    final r = analyzeWav(wav());
-    expect(r['count'], 2);
-    expect(r['duration'], 4);
+  final deadline = seoulInstant(2026, 10, 20, 9, 0);
+  Journey plan() => Journey(
+    deadline: deadline,
+    walkToPlatform: 10,
+    rideAndTransfer: 25,
+    wait: 5,
+    exitWalk: 5,
+    buffer: 5,
+  );
+  test('all travel components count toward departure', () {
+    expect(plan().total, 50);
+    expect(hm(plan().leaveAt), '08:10');
   });
-  test('Silence', () => expect(analyzeWav(wav(silent: true))['count'], 0));
+  test('deadline boundary is inclusive', () {
+    expect(plan().canArrive(plan().leaveAt), true);
+    expect(
+      plan().canArrive(plan().leaveAt.add(const Duration(seconds: 1))),
+      false,
+    );
+  });
+  test('crowd comparison uses boarding time, not time leaving home', () {
+    final r = lessCrowdedOptions(plan(), seoulInstant(2026, 10, 20, 7, 30), [
+      CrowdSlot(450, 90),
+      CrowdSlot(480, 30),
+      CrowdSlot(510, 10),
+    ]);
+    expect(r.first.crowd, 30);
+    expect(hm(r.first.depart), '07:45');
+    expect(r.every((o) => plan().canArrive(o.depart)), true);
+  });
   test(
-    'Stereo opposite phase retains energy',
-    () => expect(analyzeWav(wav(stereo: true))['count'], 2),
+    'no statistics means no fabricated recommendation',
+    () => expect(lessCrowdedOptions(plan(), plan().leaveAt, []), isEmpty),
   );
   test(
-    'Invalid header',
-    () => expect(() => analyzeWav(Uint8List(44)), throwsFormatException),
+    'past deadline produces no recommendations',
+    () => expect(
+      lessCrowdedOptions(plan(), deadline, [CrowdSlot(540, 30)]),
+      isEmpty,
+    ),
   );
+  test('next day cannot use today profile', () {
+    final now = seoulInstant(2026, 10, 20, 23, 50);
+    final j = Journey(
+      deadline: now.add(const Duration(hours: 2)),
+      walkToPlatform: 10,
+      rideAndTransfer: 10,
+      wait: 5,
+      exitWalk: 0,
+      buffer: 0,
+    );
+    expect(lessCrowdedOptions(j, now, [CrowdSlot(0, 10)]), isEmpty);
+  });
   test(
-    'Truncated chunk',
-    () =>
-        expect(() => analyzeWav(wav().sublist(0, 100)), throwsFormatException),
+    'timezone conversion round trips',
+    () => expect(hm(seoulInstant(2026, 10, 20, 0, 5)), '00:05'),
   );
 }

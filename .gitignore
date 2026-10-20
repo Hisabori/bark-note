@@ -46,3 +46,13 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+server/.env
+build-config.json
+server/data/crowd.json
+
+
+**/.env
+**/.env.*
+!**/.env.example
+

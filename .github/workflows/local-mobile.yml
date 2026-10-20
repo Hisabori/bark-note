@@ -1,0 +1,60 @@
+name: Rail Time Local Mobile
+on:
+  push:
+    branches: [rail-time-local]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  mobile:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.47.7'
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: dart tool/check.dart
+      - run: dart tool/check_live.dart
+      - name: Prepare build configuration
+        env:
+          SEOUL_KEY: ${{ secrets.RAIL_SEOUL_API_KEY }}
+        run: python3 -c 'import os,json; json.dump({"SEOUL_API_KEY":os.environ.get("SEOUL_KEY", "")},open("build-config.json","w"))'
+      - name: Build Android
+        if: runner.os == 'Linux'
+        run: flutter build apk --release --dart-define-from-file=build-config.json
+      - name: Build unsigned iOS
+        if: runner.os == 'macOS'
+        run: flutter build ios --release --no-codesign --dart-define-from-file=build-config.json
+      - name: Package IPA
+        if: runner.os == 'macOS'
+        run: |
+          test -f build/ios/iphoneos/Runner.app/Runner
+          mkdir -p build/ipa/Payload
+          ditto build/ios/iphoneos/Runner.app build/ipa/Payload/Runner.app
+          cd build/ipa
+          zip -qry Rail-Time-unsigned.ipa Payload
+          unzip -t Rail-Time-unsigned.ipa
+          shasum -a 256 Rail-Time-unsigned.ipa > SHA256.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Rail-Time-${{ runner.os }}
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/ipa/Rail-Time-unsigned.ipa
+            build/ipa/SHA256.txt
+          if-no-files-found: error
+          retention-days: 7
