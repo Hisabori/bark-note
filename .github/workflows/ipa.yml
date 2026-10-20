@@ -30,6 +30,10 @@ jobs:
           set -euo pipefail
           curl --fail --location --retry 3 'https://storage.googleapis.com/download.tensorflow.org/models/tflite/task_library/audio_classification/android/lite-model_yamnet_classification_tflite_1.tflite' -o assets/models/yamnet.tflite
           echo '10c95ea3eb9a7bb4cb8bddf6feb023250381008177ac162ce169694d05c317de  assets/models/yamnet.tflite' | shasum -a 256 --check
+      - name: Add Live Activity extension
+        run: |
+          gem install xcodeproj --no-document --user-install
+          ruby tool/add_live_activity.rb
       - name: Resolve and verify
         run: |
           flutter --version
@@ -52,6 +56,7 @@ jobs:
           APP="build/ios/iphoneos/Runner.app"
           test -d "$APP"
           test -f "$APP/Runner"
+          test -f "$APP/PlugIns/DepartureWidget.appex/DepartureWidget"
           /usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$APP/Info.plist"
           test -f "$APP/Frameworks/App.framework/flutter_assets/assets/models/yamnet.tflite"
           xcrun nm -gU "$APP/Runner" > build/ios/tflite-symbols.txt
@@ -67,15 +72,15 @@ jobs:
           mkdir -p build/ipa/Payload
           ditto "$APP" build/ipa/Payload/Runner.app
           cd build/ipa
-          /usr/bin/zip -qry Bark-Note-Unified-0.4.1-unsigned.ipa Payload
-          /usr/bin/unzip -t Bark-Note-Unified-0.4.1-unsigned.ipa
-          shasum -a 256 Bark-Note-Unified-0.4.1-unsigned.ipa > SHA256.txt
+          /usr/bin/zip -qry Bark-Note-Unified-0.5-unsigned.ipa Payload
+          /usr/bin/unzip -t Bark-Note-Unified-0.5-unsigned.ipa
+          shasum -a 256 Bark-Note-Unified-0.5-unsigned.ipa > SHA256.txt
           printf '%s\n' 'Unsigned device IPA. Re-sign with Sideloadly before installation. This is not an App Store or TestFlight build.' > INSTALL.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Bark-Note-Unified-IPA
           path: |
-            build/ipa/Bark-Note-Unified-0.4.1-unsigned.ipa
+            build/ipa/Bark-Note-Unified-0.5-unsigned.ipa
             build/ipa/SHA256.txt
             build/ipa/INSTALL.txt
           if-no-files-found: error

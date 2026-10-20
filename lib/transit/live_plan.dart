@@ -1,5 +1,28 @@
 import 'planner.dart';
 
+class BoardingEstimate {
+  const BoardingEstimate(this.eta, this.leaveBy, this.readyAt);
+  final DateTime eta, leaveBy, readyAt;
+  bool get canCatch => !readyAt.isAfter(eta);
+  int get spareSeconds => eta.difference(readyAt).inSeconds;
+}
+
+BoardingEstimate? boardingEstimate(
+  Map<String, dynamic> train,
+  int walkMinutes,
+  DateTime now, {
+  int marginMinutes = 1,
+}) {
+  if (walkMinutes < 0 || walkMinutes > 240 || marginMinutes < 0) return null;
+  final received = DateTime.tryParse(train['receivedAt'] as String? ?? '');
+  final eta = DateTime.tryParse(train['eta'] as String? ?? '');
+  if (received == null || eta == null || train['fresh'] != true) return null;
+  final age = now.difference(received).inSeconds;
+  if (age < -30 || age > 120 || !eta.isAfter(now)) return null;
+  final duration = Duration(minutes: walkMinutes + marginMinutes);
+  return BoardingEstimate(eta, eta.subtract(duration), now.add(duration));
+}
+
 class LivePlan {
   const LivePlan(this.leaveAt, this.arriveAt, this.canCatch, this.onTime);
   final DateTime leaveAt, arriveAt;

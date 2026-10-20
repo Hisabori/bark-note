@@ -1,5 +1,6 @@
 import Flutter
 import UIKit
+import ActivityKit
 import UserNotifications
 
 @main
@@ -13,6 +14,38 @@ import UserNotifications
     let channel = FlutterMethodChannel(name: "com.railtime/alerts", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     alertsChannel = channel
     channel.setMethodCallHandler { call, result in
+      if call.method == "liveStart" {
+        if #available(iOS 16.2, *) {
+          guard ActivityAuthorizationInfo().areActivitiesEnabled,
+            let args = call.arguments as? [String: Any],
+            let leave = args["leaveEpoch"] as? NSNumber,
+            let train = args["trainEpoch"] as? NSNumber,
+            let stale = args["staleEpoch"] as? NSNumber else { result(false); return }
+          let leaveAt = Date(timeIntervalSince1970: leave.doubleValue / 1000)
+          let trainAt = Date(timeIntervalSince1970: train.doubleValue / 1000)
+          let staleAt = min(trainAt, Date(timeIntervalSince1970: stale.doubleValue / 1000))
+          guard leaveAt >= Date(), staleAt > Date() else { result(false); return }
+          let attributes = DepartureAttributes(station: args["station"] as? String ?? "출발역", train: args["train"] as? String ?? "열차")
+          let state = DepartureAttributes.ContentState(leaveAt: leaveAt, trainAt: trainAt)
+          Task {
+            for activity in Activity<DepartureAttributes>.activities { await activity.end(nil, dismissalPolicy: .immediate) }
+            do {
+              _ = try Activity.request(attributes: attributes, content: ActivityContent(state: state, staleDate: staleAt), pushType: nil)
+              await MainActor.run { result(true) }
+            } catch { await MainActor.run { result(false) } }
+          }
+        } else { result(false) }
+        return
+      }
+      if call.method == "liveEnd" {
+        if #available(iOS 16.2, *) {
+          Task {
+            for activity in Activity<DepartureAttributes>.activities { await activity.end(nil, dismissalPolicy: .immediate) }
+            await MainActor.run { result(true) }
+          }
+        } else { result(true) }
+        return
+      }
       let center = UNUserNotificationCenter.current()
       if call.method == "status" {
         center.getPendingNotificationRequests { requests in

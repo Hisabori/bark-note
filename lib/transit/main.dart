@@ -8,6 +8,7 @@ import 'planner.dart';
 import 'transit_api.dart';
 import 'live_plan.dart';
 import 'kakao_panel.dart';
+import 'crowd_panel.dart';
 
 void main() => runApp(const RailApp());
 
@@ -436,6 +437,7 @@ class _HomeState extends State<Home> {
                 ),
               ),
               const SizedBox(height: 16),
+              liveCard(plan, now),
               card(
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -498,6 +500,19 @@ class _HomeState extends State<Home> {
                   ],
                 ),
               ),
+              CrowdPanel(
+                station: station.text,
+                line: selectedTrain.split('|').first,
+                direction: selectedTrain.split('|').length > 1
+                    ? selectedTrain.split('|')[1]
+                    : '',
+                now: now,
+                walk:
+                    ((int.tryParse(fields[0].text) ?? -1) >= 0 &&
+                        (int.tryParse(fields[0].text) ?? -1) <= 240)
+                    ? int.parse(fields[0].text)
+                    : -1,
+              ),
               KakaoPanel(
                 apiKey: kakaoKey.text,
                 deadline: deadline,
@@ -506,7 +521,7 @@ class _HomeState extends State<Home> {
                 onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
               ),
             ],
-            if (tab == 0 && plan != null) liveCard(plan, now),
+
             if (tab == 1) ...[
               title('지금 오는 열차'),
               TextField(
@@ -529,11 +544,7 @@ class _HomeState extends State<Home> {
                 label: const Text('실시간 도착정보 조회'),
               ),
               if (arrivals.isEmpty)
-                card(
-                  const Text(
-                    '아직 조회된 열차가 없습니다. 서버 미연결이나 제공기관 오류일 때 도착정보를 만들어 표시하지 않습니다.',
-                  ),
-                ),
+                card(const Text('아직 조회된 열차가 없습니다. 인터넷 연결과 인증키를 확인한 뒤 조회해주세요.')),
               if (arrivals.isNotEmpty) ...[
                 const Text('출발 계획에 사용할 노선·방향을 열차 카드에서 선택하세요.'),
                 Wrap(
@@ -667,73 +678,187 @@ class _HomeState extends State<Home> {
     );
   }
 
-  Widget liveCard(Journey plan, DateTime now) {
-    final matching = arrivals
-        .where(
-          (a) =>
-              '${a['line']}|${a['direction']}|${a['terminal']}' ==
-              selectedTrain,
-        )
-        .toList();
-    matching.sort(
-      (a, b) =>
-          (a['eta'] as String? ?? 'z').compareTo(b['eta'] as String? ?? 'z'),
-    );
-    final candidates = matching
-        .map((a) => livePlan(a, plan, now))
-        .whereType<LivePlan>()
-        .where((p) => p.canCatch)
-        .toList();
-    final chosen = candidates.isEmpty ? null : candidates.first;
-    final selected = selectedTrain.split('|');
+  Future<void> showActivity(
+    BoardingEstimate estimate,
+    Map<String, dynamic> train,
+  ) async {
+    try {
+      final received = DateTime.parse(train['receivedAt'] as String);
+      final ok = await alerts.invokeMethod<bool>('liveStart', {
+        'station': station.text.trim(),
+        'train':
+            '${_lineName(train['line'].toString())} ${train['direction']} ${train['terminal']}행',
+        'leaveEpoch': estimate.leaveBy.millisecondsSinceEpoch,
+        'trainEpoch': estimate.eta.millisecondsSinceEpoch,
+        'staleEpoch': received
+            .add(const Duration(seconds: 120))
+            .millisecondsSinceEpoch,
+      });
+      if (ok != true) {
+        fail('실시간 현황을 사용할 수 없습니다. iOS 16.2 이상과 실시간 현황 권한을 확인해주세요.');
+      }
+    } catch (_) {
+      fail('실시간 현황을 시작하지 못했습니다. 기기 설정을 확인해주세요.');
+    }
+  }
+
+  Widget liveCard(Journey? plan, DateTime now) {
+    final groups = <String, Map<String, dynamic>>{};
+    for (final train in arrivals) {
+      groups['${train['line']}|${train['direction']}|${train['terminal']}'] =
+          train;
+    }
+    final walk = int.tryParse(fields[0].text);
+    final matching =
+        arrivals
+            .where(
+              (a) =>
+                  '${a['line']}|${a['direction']}|${a['terminal']}' ==
+                  selectedTrain,
+            )
+            .toList()
+          ..sort(
+            (a, b) => (a['eta'] as String? ?? 'z').compareTo(
+              b['eta'] as String? ?? 'z',
+            ),
+          );
+    final usable = <MapEntry<Map<String, dynamic>, BoardingEstimate>>[];
+    if (walk != null) {
+      for (final train in matching) {
+        final estimate = boardingEstimate(train, walk, now);
+        if (estimate != null) usable.add(MapEntry(train, estimate));
+      }
+    }
+    final catchable = usable.where((e) => e.value.canCatch).toList();
+    final chosen = catchable.isEmpty ? null : catchable.first;
     return card(
       Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           title('지금 나가면 탈 수 있을까?'),
-          if (selectedTrain.isEmpty)
-            const Text('실시간 열차에서 탈 노선·방향·종착역을 선택해주세요.')
-          else ...[
-            Text(
-              '${_lineName(selected.first)} · ${selected[1]} · ${selected[2]}행',
-            ),
-            if (chosen == null)
-              const Text('현재 걸어서 탈 수 있는 열차 예측이 없습니다. 새로 조회하거나 다음 열차를 확인해주세요.')
-            else ...[
-              Text(
-                '${hm(chosen.leaveAt)}까지 출발',
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              Text(
-                '약 ${chosen.leaveAt.difference(now).inSeconds ~/ 60}분 뒤 출발 · 예상 도착 ${hm(chosen.arriveAt)}',
-              ),
-              Text(
-                chosen.onTime
-                    ? '입력한 여유시간을 포함해 목표 도착 가능'
-                    : '이 열차는 목표 도착 여유가 부족합니다.',
-              ),
-            ],
-          ],
-          const SizedBox(height: 8),
           const Text(
-            '승강장 도보 + 탑승 여유 1분 반영. 이동·환승 시간은 직접 입력한 값이며, 종착역 이후 경로와 급행 정차 여부는 직접 확인해주세요.',
+            '출발역과 승강장까지 걸리는 시간을 입력하고 탈 노선·방향을 선택하세요. 목적지 입력 없이 탑승 가능 여부를 확인할 수 있습니다.',
           ),
-          Wrap(
-            spacing: 8,
-            children: [
-              OutlinedButton.icon(
-                onPressed: loading ? null : fetchArrivals,
-                icon: const Icon(Icons.refresh),
-                label: const Text('현재 열차로 다시 계산'),
+          TextField(
+            controller: station,
+            decoration: const InputDecoration(labelText: '출발역'),
+            onChanged: (_) => setState(() {
+              arrivals = [];
+              selectedTrain = '';
+              confirmed = false;
+              generation++;
+            }),
+          ),
+          TextField(
+            controller: fields[0],
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(
+              labelText: '지금 위치 → 승강장',
+              suffixText: '분',
+            ),
+            onChanged: (_) {
+              setState(() {});
+            },
+          ),
+          OutlinedButton.icon(
+            onPressed: loading ? null : fetchArrivals,
+            icon: const Icon(Icons.refresh),
+            label: const Text('실시간 열차 조회·다시 계산'),
+          ),
+          if (groups.isNotEmpty)
+            DropdownButton<String>(
+              isExpanded: true,
+              value: groups.containsKey(selectedTrain) ? selectedTrain : null,
+              hint: const Text('탈 노선·방향·종착역 선택'),
+              items: groups.entries
+                  .map(
+                    (e) => DropdownMenuItem(
+                      value: e.key,
+                      child: Text(
+                        '${_lineName(e.value['line'].toString())} · ${e.value['direction']} · ${e.value['terminal']}행',
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  )
+                  .toList(),
+              onChanged: (v) async {
+                if (v != null) {
+                  setState(() => selectedTrain = v);
+                  try {
+                    await save();
+                  } catch (e) {
+                    fail(e);
+                  }
+                }
+              },
+            ),
+          if (walk == null || walk < 0 || walk > 240)
+            const Text('도보시간은 0~240분으로 입력해주세요.'),
+          if (selectedTrain.isNotEmpty && usable.isEmpty)
+            const Text(
+              '계산 가능한 최신 도착예측이 없습니다. 2분이 지난 정보나 도착 시각이 없는 열차는 다시 조회해주세요.',
+            ),
+          for (final entry in usable.take(3))
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: Icon(
+                entry.value.canCatch
+                    ? Icons.check_circle_outline
+                    : Icons.directions_walk,
+                color: entry.value.canCatch ? Colors.green : Colors.orange,
               ),
-              TextButton(
-                onPressed: () => setState(() => tab = 1),
-                child: const Text('탈 열차 선택'),
+              title: Text(
+                entry.value.canCatch ? '지금 출발하면 탑승 가능 예상' : '이 열차는 도보시간이 부족해요',
               ),
-            ],
+              subtitle: Text(
+                '열차 ${hm(entry.value.eta)} · 승강장 준비 ${hm(entry.value.readyAt)}\n${entry.value.canCatch ? '탑승 여유' : '부족한 시간'} ${(entry.value.spareSeconds.abs() / 60).ceil()}분',
+              ),
+              isThreeLine: true,
+            ),
+          if (chosen != null) ...[
+            Text(
+              '${hm(chosen.value.leaveBy)}까지 출발',
+              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
+            ),
+            if (plan != null)
+              Text(
+                '입력한 이동시간 기준 예상 도착 ${hm(chosen.value.eta.add(Duration(minutes: plan.rideAndTransfer + plan.exitWalk)))}',
+              ),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.icon(
+                  onPressed: chosen.value.leaveBy.isAfter(now)
+                      ? () => schedule(
+                          chosen.value.leaveBy,
+                          basis: '선택한 열차 예측 기준입니다. 운행 변동은 앱에서 확인해주세요.',
+                        )
+                      : null,
+                  icon: const Icon(Icons.notifications_outlined),
+                  label: const Text('이 열차 출발 알림'),
+                ),
+                if (Platform.isIOS)
+                  OutlinedButton.icon(
+                    onPressed: () => showActivity(chosen.value, chosen.key),
+                    icon: const Icon(Icons.phone_iphone),
+                    label: const Text('다이내믹 아일랜드에 표시'),
+                  ),
+              ],
+            ),
+          ],
+          if (Platform.isIOS)
+            TextButton(
+              onPressed: () async {
+                try {
+                  await alerts.invokeMethod('liveEnd');
+                } catch (_) {
+                  fail('실시간 현황을 종료하지 못했습니다.');
+                }
+              },
+              child: const Text('실시간 현황 종료'),
+            ),
+          const Text(
+            '승강장 도보 + 탑승 여유 1분을 반영한 예측입니다. 종착역·급행 정차 여부는 확인해주세요. 실시간 현황은 마지막 조회 예측의 카운트다운이며 앱 종료 후 운행정보를 새로 조회하지 않습니다.',
           ),
         ],
       ),
@@ -759,4 +884,3 @@ class _HomeState extends State<Home> {
       }[value] ??
       '노선 $value';
 }
-
