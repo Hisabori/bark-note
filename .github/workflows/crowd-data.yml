@@ -1,0 +1,14 @@
+name: Fetch official crowd data
+on:
+  push:
+    branches: [bark-note-unified]
+    paths: ['tool/fetch_crowd.py', '.github/workflows/crowd-data.yml']
+permissions:
+  contents: read
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 tool/fetch_crowd.py
