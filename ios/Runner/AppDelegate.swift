@@ -14,6 +14,17 @@ import UserNotifications
     let channel = FlutterMethodChannel(name: "com.railtime/alerts", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     alertsChannel = channel
     channel.setMethodCallHandler { call, result in
+      #if DEBUG
+      if call.method == "startupReady" {
+        do {
+          let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+          try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+          try "first-frame-rendered".write(to: folder.appendingPathComponent("startup-smoke-ready"), atomically: true, encoding: .utf8)
+          result(true)
+        } catch { result(FlutterError(code: "SMOKE", message: error.localizedDescription, details: nil)) }
+        return
+      }
+      #endif
       if call.method == "liveStart" {
         if #available(iOS 16.2, *) {
           guard ActivityAuthorizationInfo().areActivitiesEnabled,

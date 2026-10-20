@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'bark_home.dart' as bark;
 import 'transit/main.dart' as transit;
 
-void main() => runApp(const BarkApp());
+void main() {
+  runApp(const BarkApp());
+  if (const bool.fromEnvironment('STARTUP_SMOKE')) {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await const MethodChannel(
+        'com.railtime/alerts',
+      ).invokeMethod('startupReady');
+    });
+  }
+}
 
 class BarkApp extends StatelessWidget {
   const BarkApp({super.key});
