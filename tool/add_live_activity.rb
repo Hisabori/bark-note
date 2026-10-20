@@ -12,6 +12,8 @@ unless project.targets.any? { |t| t.name == 'DepartureWidget' }
   target.source_build_phase.add_file_reference(widget)
   target.build_configurations.each do |config|
     config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = 'com.barknote.barkNote.DepartureWidget'
+    config.build_settings['PRODUCT_NAME'] = 'DepartureWidget'
+    config.build_settings['PRODUCT_MODULE_NAME'] = 'DepartureWidget'
     config.build_settings['INFOPLIST_FILE'] = 'LiveActivity/Info.plist'
     config.build_settings['GENERATE_INFOPLIST_FILE'] = 'NO'
     config.build_settings['SWIFT_VERSION'] = '5.0'
@@ -29,3 +31,4 @@ unless project.targets.any? { |t| t.name == 'DepartureWidget' }
   phase.add_file_reference(target.product_reference).settings = {'ATTRIBUTES' => ['RemoveHeadersOnCopy']}
   project.save
 end
+
