@@ -79,11 +79,8 @@ class _HomeState extends State<Home> {
       final p = jsonDecode(await f.readAsString()) as Map;
       station.text = p['station'] as String? ?? '';
       destination.text = p['destination'] as String? ?? '';
-      server.text = p['server'] as String? ?? '';
       apiKey.text = p['apiKey'] as String? ?? apiKey.text;
       kakaoKey.text = p['kakaoKey'] as String? ?? kakaoKey.text;
-      line.text = p['line'] as String? ?? '';
-      direction.text = p['direction'] as String? ?? '';
       selectedTrain = p['selectedTrain'] as String? ?? '';
       final savedDeadline = DateTime.tryParse(p['deadline'] as String? ?? '');
       if (savedDeadline != null && savedDeadline.isAfter(DateTime.now())) {
@@ -118,11 +115,8 @@ class _HomeState extends State<Home> {
       jsonEncode({
         'station': station.text,
         'destination': destination.text,
-        'server': server.text,
         'apiKey': apiKey.text,
         'kakaoKey': kakaoKey.text,
-        'line': line.text,
-        'direction': direction.text,
         'selectedTrain': selectedTrain,
         'confirmed': confirmed,
         'deadline': deadline.toUtc().toIso8601String(),
@@ -765,3 +759,4 @@ class _HomeState extends State<Home> {
       }[value] ??
       '노선 $value';
 }
+
