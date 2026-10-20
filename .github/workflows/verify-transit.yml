@@ -1,0 +1,33 @@
+name: Verify Seoul live boarding data
+on:
+  push:
+    branches: [bark-note-unified]
+    paths: ['.github/workflows/verify-transit.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check provider authentication and live forecast timestamps
+        env:
+          SEOUL_KEY: ${{ secrets.RAIL_SEOUL_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, urllib.error, json, os, datetime
+          try:
+              url='http://swopenapi.seoul.go.kr/api/subway/'+os.environ['SEOUL_KEY']+'/json/realtimeStationArrival/0/5/'+urllib.parse.quote('강남')
+              with urllib.request.urlopen(url,timeout=20) as r: data=json.load(r)
+              assert data.get('errorMessage',{}).get('code')=='INFO-000'
+              rows=data['realtimeArrivalList']; assert rows
+              now=datetime.datetime.now(datetime.timezone.utc)
+              fresh=sum(-30 <= (now-datetime.datetime.fromisoformat(r['recptnDt'].replace(' ','T')+'+09:00')).total_seconds() <= 120 for r in rows)
+              print('Seoul authentication OK; arrivals:',len(rows),'fresh forecasts:',fresh)
+              assert fresh>0
+          except urllib.error.HTTPError as e:
+              print('Provider HTTP error:',e.code); raise SystemExit(1)
+          except Exception as e:
+              print('Live boarding verification failed:',type(e).__name__); raise SystemExit(1)
+          PY
+
