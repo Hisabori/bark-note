@@ -34,10 +34,16 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: dart tool/check_ai.dart
+      - name: Verify Kakao live API
+        continue-on-error: true
+        env:
+          KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+        run: python3 tool/check_kakao_live.py
       - name: Inject private transit key
         env:
           SEOUL_KEY: ${{ secrets.RAIL_SEOUL_API_KEY }}
-        run: python3 -c 'import os,json; json.dump({"SEOUL_API_KEY":os.environ.get("SEOUL_KEY", "")},open("build-config.json","w"))'
+          KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+        run: python3 -c 'import os,json; json.dump({"SEOUL_API_KEY":os.environ.get("SEOUL_KEY", ""), "KAKAO_REST_API_KEY":os.environ.get("KAKAO_KEY", "")},open("build-config.json","w"))'
       - run: flutter build apk --release --dart-define-from-file=build-config.json
       - uses: actions/upload-artifact@v4
         with:

@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'planner.dart';
 import 'transit_api.dart';
 import 'live_plan.dart';
+import 'kakao_panel.dart';
 
 void main() => runApp(const RailApp());
 
@@ -35,22 +36,20 @@ class _HomeState extends State<Home> {
   static const alerts = MethodChannel('com.railtime/alerts');
   final station = TextEditingController(),
       destination = TextEditingController(),
-      server = TextEditingController(),
+      kakaoKey = TextEditingController(
+        text: const String.fromEnvironment('KAKAO_REST_API_KEY'),
+      ),
       apiKey = TextEditingController(
         text: const String.fromEnvironment('SEOUL_API_KEY'),
-      ),
-      line = TextEditingController(),
-      direction = TextEditingController();
+      );
   final fields = List.generate(5, (_) => TextEditingController());
   final labels = ['출발지 → 승강장', '열차 이동 + 환승', '예상 열차 대기', '도착역 → 목적지', '추가 여유'];
   int tab = 0;
   bool confirmed = false, loading = false;
   String message = '';
-  String day = 'weekday', arrivalDirection = '전체', selectedTrain = '';
+  String arrivalDirection = '전체', selectedTrain = '';
   DateTime deadline = DateTime.now().toUtc().add(const Duration(minutes: 90));
   List<Map<String, dynamic>> arrivals = [];
-  Map<String, dynamic>? crowd;
-  List<CrowdSlot> slots = [];
   Timer? timer;
   DateTime? reminder;
   int generation = 0;
@@ -60,12 +59,6 @@ class _HomeState extends State<Home> {
     for (int i = 0; i < 5; i++) {
       fields[i].text = ['10', '30', '5', '5', '5'][i];
     }
-    final s = seoulClock(DateTime.now());
-    day = s.weekday == 7
-        ? 'sunday'
-        : s.weekday == 6
-        ? 'saturday'
-        : 'weekday';
     load();
     loadReminder();
     timer = Timer.periodic(const Duration(seconds: 1), (_) {
@@ -88,6 +81,7 @@ class _HomeState extends State<Home> {
       destination.text = p['destination'] as String? ?? '';
       server.text = p['server'] as String? ?? '';
       apiKey.text = p['apiKey'] as String? ?? apiKey.text;
+      kakaoKey.text = p['kakaoKey'] as String? ?? kakaoKey.text;
       line.text = p['line'] as String? ?? '';
       direction.text = p['direction'] as String? ?? '';
       selectedTrain = p['selectedTrain'] as String? ?? '';
@@ -126,6 +120,7 @@ class _HomeState extends State<Home> {
         'destination': destination.text,
         'server': server.text,
         'apiKey': apiKey.text,
+        'kakaoKey': kakaoKey.text,
         'line': line.text,
         'direction': direction.text,
         'selectedTrain': selectedTrain,
@@ -269,8 +264,6 @@ class _HomeState extends State<Home> {
           ok == true &&
           station.text.trim().isNotEmpty &&
           destination.text.trim().isNotEmpty;
-      crowd = null;
-      slots = [];
       arrivals = [];
       selectedTrain = '';
       generation++;
@@ -327,68 +320,6 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> fetchCrowd() async {
-    if (loading) {
-      return;
-    }
-    if (server.text.trim().isEmpty) {
-      fail('설정에서 통계 데이터 서버를 연결해주세요.');
-      return;
-    }
-    if (line.text.trim().isEmpty || direction.text.trim().isEmpty) {
-      fail('설정에 혼잡도 조회 노선과 방향을 입력해주세요.');
-      return;
-    }
-    setState(() {
-      loading = true;
-      message = '';
-      slots = [];
-      crowd = null;
-    });
-    try {
-      final value = await TransitApi(server.text.trim()).get('crowd', {
-        'station': station.text.trim(),
-        'line': line.text.trim(),
-        'direction': direction.text.trim(),
-        'day': day,
-      });
-      if (value['kind'] != 'historical') {
-        throw const FormatException('통계 데이터 형식을 확인해주세요.');
-      }
-      final parsed = (value['slots'] as List)
-          .map(
-            (e) => CrowdSlot(
-              (e['minute'] as num).toInt(),
-              (e['percent'] as num).toDouble(),
-            ),
-          )
-          .toList();
-      if (parsed.any(
-            (s) =>
-                s.minute < 0 ||
-                s.minute >= 1440 ||
-                s.minute % 30 != 0 ||
-                !s.percent.isFinite ||
-                s.percent < 0,
-          ) ||
-          parsed.map((s) => s.minute).toSet().length != parsed.length) {
-        throw const FormatException('올바르지 않은 혼잡도 통계입니다.');
-      }
-      if (mounted) {
-        setState(() {
-          crowd = value;
-          slots = parsed;
-        });
-      }
-    } catch (e) {
-      fail(e);
-    } finally {
-      if (mounted) {
-        setState(() => loading = false);
-      }
-    }
-  }
-
   Future<void> cancelReminder() async {
     try {
       await alerts.invokeMethod('cancel');
@@ -418,7 +349,7 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> schedule(DateTime time) async {
+  Future<void> schedule(DateTime time, {String? basis}) async {
     if (!time.isAfter(DateTime.now().toUtc())) {
       fail('이미 지난 출발 시각입니다. 목표 시각을 변경해주세요.');
       return;
@@ -427,7 +358,7 @@ class _HomeState extends State<Home> {
       final granted = await alerts.invokeMethod<bool>('schedule', {
         'epoch': time.millisecondsSinceEpoch,
         'title': '이제 나갈 시간이에요',
-        'body': '${destination.text}까지 여유 있게 도착하려면 출발해주세요. 입력한 이동시간 기준입니다.',
+        'body': basis ?? '입력한 이동시간 기준으로 출발할 시간입니다.',
       });
       if (granted != true) {
         fail('알림 권한이 허용되지 않았습니다. 기기 설정을 확인해주세요.');
@@ -444,15 +375,7 @@ class _HomeState extends State<Home> {
   @override
   void dispose() {
     timer?.cancel();
-    for (final c in [
-      station,
-      destination,
-      server,
-      apiKey,
-      line,
-      direction,
-      ...fields,
-    ]) {
+    for (final c in [station, destination, apiKey, kakaoKey, ...fields]) {
       c.dispose();
     }
     super.dispose();
@@ -511,7 +434,7 @@ class _HomeState extends State<Home> {
               ),
             if (tab == 0) ...[
               const Text(
-                '덜 붐비게,\n늦지 않게.',
+                '길을 찾고,\n제때 출발해요.',
                 style: TextStyle(
                   fontSize: 34,
                   fontWeight: FontWeight.w800,
@@ -581,76 +504,12 @@ class _HomeState extends State<Home> {
                   ],
                 ),
               ),
-              card(
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    title('평소 덜 붐비는 시간'),
-                    const Text(
-                      '출발역을 지나는 열차의 30분 평균 통계입니다. 실시간 칸별 혼잡도나 좌석 보장은 아닙니다.',
-                    ),
-                    DropdownButton<String>(
-                      value: day,
-                      isExpanded: true,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'weekday',
-                          child: Text('평일 통계'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'saturday',
-                          child: Text('토요일 통계'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'sunday',
-                          child: Text('일요일·공휴일 통계'),
-                        ),
-                      ],
-                      onChanged: (v) {
-                        if (v != null) {
-                          setState(() {
-                            day = v;
-                            slots = [];
-                            crowd = null;
-                          });
-                        }
-                      },
-                    ),
-                    const Text('공휴일은 직접 선택해주세요. 오늘 서울 날짜의 후보만 비교합니다.'),
-                    OutlinedButton(
-                      onPressed: loading ? null : fetchCrowd,
-                      child: const Text('혼잡도 통계 조회'),
-                    ),
-                    if (crowd == null)
-                      const Text(
-                        '통계 미연결 · 데이터를 받으면 도착 시각을 지킬 수 있는 출발 후보 중 덜 붐비는 시간을 비교합니다.',
-                      ),
-                    if (crowd != null) ...[
-                      Text(
-                        '통계 기준일 ${crowd!['asOf']} · ${line.text} ${direction.text}',
-                      ),
-                      Text(
-                        '출처 ${crowd!['source']}',
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                      if (plan != null) ..._options(plan, now),
-                      const Divider(),
-                      Wrap(
-                        spacing: 12,
-                        runSpacing: 8,
-                        children: slots
-                            .map(
-                              (s) => Chip(
-                                label: Text(
-                                  '${(s.minute ~/ 60).toString().padLeft(2, '0')}:${(s.minute % 60).toString().padLeft(2, '0')}  ${s.percent.toStringAsFixed(1)}%',
-                                ),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                    ],
-                  ],
-                ),
+              KakaoPanel(
+                apiKey: kakaoKey.text,
+                deadline: deadline,
+                buffer: int.tryParse(fields[4].text) ?? 5,
+                onTime: targetTime,
+                onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
               ),
             ],
             if (tab == 0 && plan != null) liveCard(plan, now),
@@ -774,44 +633,24 @@ class _HomeState extends State<Home> {
                 decoration: const InputDecoration(labelText: '서울시 지하철 인증키'),
               ),
               const Text(
-                '실시간 열차는 휴대폰에서 서울시 API로 직접 조회합니다. 인터넷 연결이 필요합니다. 인증키는 이 기기에 저장됩니다. 아래 서버는 혼잡도 통계용 선택 설정입니다.',
+                '실시간 열차는 휴대폰에서 서울시 API로 직접 조회합니다. 인터넷 연결이 필요합니다. 인증키는 이 기기에 저장됩니다. 카카오 경로도 휴대폰에서 직접 조회합니다.',
               ),
               TextField(
-                controller: server,
-                keyboardType: TextInputType.url,
-                decoration: const InputDecoration(
-                  labelText: '정보 서버 주소',
-                  hintText: 'https://your-transit-api.example',
-                ),
-              ),
-              TextField(
-                controller: line,
-                decoration: const InputDecoration(
-                  labelText: '혼잡도 통계의 노선 값',
-                  hintText: '통계 데이터의 노선과 정확히 일치하게 입력',
-                ),
-              ),
-              TextField(
-                controller: direction,
-                decoration: const InputDecoration(
-                  labelText: '혼잡도 통계의 방향 값',
-                  hintText: '내선/외선 또는 상선/하선 등 원본과 일치',
-                ),
+                controller: kakaoKey,
+                obscureText: true,
+                autocorrect: false,
+                enableSuggestions: false,
+                decoration: const InputDecoration(labelText: '카카오 REST API 키'),
               ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: () async {
                   try {
-                    if (server.text.trim().isNotEmpty) {
-                      TransitApi(server.text.trim());
-                    }
                     await cancelReminder();
                     await save();
                     if (mounted) {
                       setState(() {
                         arrivals = [];
-                        slots = [];
-                        crowd = null;
                         generation++;
                         message = '설정을 저장했습니다.';
                       });
@@ -824,7 +663,7 @@ class _HomeState extends State<Home> {
               ),
               card(
                 const Text(
-                  '지원 범위\n\n수도권 데이터 연결용 첫 버전입니다. 실제 제공 범위는 운영기관 API에 따릅니다.\n\n출발 계산: 직접 입력한 이동시간 기준\n혼잡도 추천: 데이터가 연결된 역의 과거 30분 평균 기준\n칸별 실시간 혼잡도·자동 길찾기·막차 보장: 아직 제공하지 않습니다.\n\n출발 알림은 저장한 시각의 로컬 알림이며 실시간 운행을 백그라운드에서 재조회하지 않습니다.',
+                  '지원 범위\n\n수도권 데이터 연결용 첫 버전입니다. 실제 제공 범위는 운영기관 API에 따릅니다.\n\n출발 계산: 직접 입력한 이동시간 기준\n경로 조회: 카카오 API 현재 응답 기준\n칸별 실시간 혼잡도·막차 보장: 제공하지 않습니다.\n\n출발 알림은 저장한 시각의 로컬 알림이며 실시간 운행을 백그라운드에서 재조회하지 않습니다.',
                 ),
               ),
             ],
@@ -905,29 +744,6 @@ class _HomeState extends State<Home> {
         ],
       ),
     );
-  }
-
-  List<Widget> _options(Journey plan, DateTime now) {
-    final options = lessCrowdedOptions(plan, now, slots);
-    if (options.isEmpty) {
-      return [const Text('조건에 맞는 비교 후보가 없습니다. 데이터·목표 도착 시각을 확인해주세요.')];
-    }
-    return options
-        .map(
-          (o) => ListTile(
-            contentPadding: EdgeInsets.zero,
-            title: Text(
-              '${hm(o.depart)} 출발 · 탑승 시간대 평균 ${o.crowd.toStringAsFixed(1)}%',
-            ),
-            subtitle: Text('입력시간 기준 ${hm(plan.arrivalAt(o.depart))} 도착'),
-            trailing: IconButton(
-              tooltip: '이 시각으로 알림 예약',
-              icon: const Icon(Icons.notifications_active_outlined),
-              onPressed: () => schedule(o.depart),
-            ),
-          ),
-        )
-        .toList();
   }
 
   String _lineName(String value) =>
