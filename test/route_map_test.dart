@@ -57,7 +57,7 @@ void main() {
       viewport.pixel(points.first).y,
       lessThan(viewport.pixel(points.last).y),
     );
-    expect(viewport.uri.queryParameters['coord'], 'WTM');
+    expect(viewport.uri.queryParameters['coord'], 'WGS84');
     expect(viewport.uri.queryParameters['scale'], '1');
     expect(viewport.uri.queryParameters.containsKey('key'), isFalse);
   });

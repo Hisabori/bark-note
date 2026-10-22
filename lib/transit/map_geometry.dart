@@ -50,10 +50,22 @@ class RouteViewport {
         maxX = projected.map((p) => p.x).reduce(math.max);
     final minY = projected.map((p) => p.y).reduce(math.min),
         maxY = projected.map((p) => p.y).reduce(math.max);
-    center = MapPoint((minX + maxX) / 2, (minY + maxY) / 2);
+    geographicCenter = RoutePoint(
+      (points.map((p) => p.x).reduce(math.min) +
+              points.map((p) => p.x).reduce(math.max)) /
+          2,
+      (points.map((p) => p.y).reduce(math.min) +
+              points.map((p) => p.y).reduce(math.max)) /
+          2,
+    );
+    center = projectWtm(geographicCenter);
     final required = math.max(
-      (maxX - minX) / (width - 120),
-      (maxY - minY) / (height - 120),
+      2 *
+          math.max((maxX - center.x).abs(), (minX - center.x).abs()) /
+          (width - 120),
+      2 *
+          math.max((maxY - center.y).abs(), (minY - center.y).abs()) /
+          (height - 120),
     );
     var fittedLevel = 1;
     while (fittedLevel < 15 && math.pow(2, fittedLevel - 3) < required) {
@@ -63,6 +75,7 @@ class RouteViewport {
   }
   static const width = 960.0, height = 640.0;
   late final MapPoint center;
+  late final RoutePoint geographicCenter;
   late final int level;
   double get metresPerPixel => math.pow(2, level - 3).toDouble();
   MapPoint pixel(RoutePoint p) {
@@ -74,8 +87,8 @@ class RouteViewport {
   }
 
   Uri get uri => Uri.https('dapi.kakao.com', '/v2/maps/staticmap', {
-    'center': '${center.x},${center.y}',
-    'coord': 'WTM',
+    'center': '${geographicCenter.x},${geographicCenter.y}',
+    'coord': 'WGS84',
     'size': '960x640',
     'scale': '1',
     'lv': '$level',
@@ -83,4 +96,3 @@ class RouteViewport {
     'logo_pos': 'BOTTOM_LEFT',
   });
 }
-
