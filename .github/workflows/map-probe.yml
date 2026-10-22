@@ -1,0 +1,31 @@
+name: Verify Kakao map image parameters
+on:
+  workflow_dispatch:
+  push:
+    branches: [bark-note-unified]
+    paths: ['.github/workflows/map-probe.yml']
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check official static map variants
+        env:
+          KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+        run: |
+          python3 - <<'PY'
+          import urllib.request, urllib.parse, urllib.error, os, json
+          variants = [
+            {'center':'127.027,37.498','size':'640x480'},
+            {'center':'127.027,37.498','size':'960x640','scale':'1','lv':'8'},
+            {'center':'200000,500000','coord':'WTM','size':'960x640','scale':'1','lv':'8'},
+          ]
+          for q in variants:
+            req=urllib.request.Request('https://dapi.kakao.com/v2/maps/staticmap?'+urllib.parse.urlencode(q),headers={'Authorization':'KakaoAK '+os.environ['KAKAO_KEY']})
+            try:
+              with urllib.request.urlopen(req,timeout=20) as r: print(q, r.status, r.headers.get('Content-Type'), len(r.read()))
+            except urllib.error.HTTPError as e:
+              print(q,'HTTP',e.code,'response',e.read(400).decode('utf-8',errors='replace'))
+          PY
+
