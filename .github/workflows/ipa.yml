@@ -15,7 +15,7 @@ permissions:
   contents: read
 jobs:
   ipa:
-    runs-on: macos-latest
+    runs-on: macos-15-intel
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
@@ -88,5 +88,6 @@ jobs:
             build/ipa/INSTALL.txt
           if-no-files-found: error
           retention-days: 7
+
 
 
