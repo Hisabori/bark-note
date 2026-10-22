@@ -55,10 +55,11 @@ class RouteViewport {
       (maxX - minX) / (width - 120),
       (maxY - minY) / (height - 120),
     );
-    level = 1;
-    while (level < 15 && math.pow(2, level - 3) < required) {
-      level++;
+    var fittedLevel = 1;
+    while (fittedLevel < 15 && math.pow(2, fittedLevel - 3) < required) {
+      fittedLevel++;
     }
+    level = fittedLevel;
   }
   static const width = 960.0, height = 640.0;
   late final MapPoint center;
@@ -82,3 +83,4 @@ class RouteViewport {
     'logo_pos': 'BOTTOM_LEFT',
   });
 }
+
