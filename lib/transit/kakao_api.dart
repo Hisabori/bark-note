@@ -26,9 +26,27 @@ class KakaoPlace {
 }
 
 class KakaoRoute {
-  const KakaoRoute(this.seconds, this.transfers, this.guidance);
+  const KakaoRoute(
+    this.seconds,
+    this.transfers,
+    this.guidance, {
+    this.type = '',
+    this.legs = const [],
+  });
   final int seconds, transfers;
   final List<String> guidance;
+  final String type;
+  final List<KakaoLeg> legs;
+  bool get hasBus =>
+      type == 'BUS' ||
+      type == 'BUS_AND_SUBWAY' ||
+      legs.any((s) => s.type == 'BUS');
+  String get label => switch (type) {
+    'BUS' => '버스',
+    'SUBWAY' => '지하철',
+    'BUS_AND_SUBWAY' => '버스 + 지하철',
+    _ => '대중교통',
+  };
   int get minutes => (seconds / 60).ceil();
   DateTime leaveBy(DateTime deadline, int buffer) =>
       deadline.subtract(Duration(seconds: seconds, minutes: buffer));
@@ -40,8 +58,72 @@ class KakaoRoute {
         .map((s) => '${s['properties']['guidance'] ?? ''}')
         .where((s) => s.isNotEmpty)
         .toList();
-    return KakaoRoute(seconds, (p['transfers'] as num? ?? 0).toInt(), steps);
+    return KakaoRoute(
+      seconds,
+      (p['transfers'] as num? ?? 0).toInt(),
+      steps,
+      type: p['type'] as String? ?? '',
+      legs: (j['steps'] as List? ?? [])
+          .map((s) => KakaoLeg.fromJson(Map<String, dynamic>.from(s)))
+          .toList(),
+    );
   }
+}
+
+class RoutePoint {
+  const RoutePoint(this.x, this.y);
+  final double x, y;
+}
+
+class KakaoLeg {
+  const KakaoLeg(
+    this.type,
+    this.guidance,
+    this.seconds,
+    this.stops,
+    this.vehicles,
+    this.points,
+  );
+  final String type, guidance;
+  final int seconds;
+  final List<String> stops, vehicles;
+  // Invalid coordinates break the line; never bridge a missing span.
+  final List<RoutePoint?> points;
+  factory KakaoLeg.fromJson(Map<String, dynamic> j) {
+    final p = j['properties'] as Map? ?? {};
+    final path = j['path'] as Map? ?? {};
+    return KakaoLeg(
+      '${p['type'] ?? ''}',
+      '${p['guidance'] ?? ''}',
+      (p['time'] as num? ?? 0).toInt(),
+      (p['stops'] as List? ?? [])
+          .whereType<Map>()
+          .map((s) => '${s['name'] ?? ''}')
+          .where((s) => s.isNotEmpty)
+          .toList(),
+      (p['vehicles'] as List? ?? [])
+          .whereType<Map>()
+          .map((s) => '${s['name'] ?? ''}')
+          .where((s) => s.isNotEmpty)
+          .toList(),
+      (path['points'] as List? ?? []).map<RoutePoint?>((v) {
+        if (v is! List || v.length < 2 || v[0] is! num || v[1] is! num) {
+          return null;
+        }
+        final x = (v[0] as num).toDouble(), y = (v[1] as num).toDouble();
+        if (!x.isFinite || !y.isFinite || x.abs() > 180 || y.abs() > 90) {
+          return null;
+        }
+        return RoutePoint(x, y);
+      }).toList(),
+    );
+  }
+  String get label => switch (type) {
+    'BUS' => '버스',
+    'SUBWAY' => '지하철',
+    'WALKING' => '도보',
+    _ => '이동',
+  };
 }
 
 class KakaoApi {
@@ -96,6 +178,7 @@ class KakaoApi {
       'end_x': '${end.x}',
       'end_y': '${end.y}',
       'e_name': end.name,
+      'output_coord': 'WGS84',
     });
     if (j['status'] != 'OK') {
       throw StateError('대중교통 경로를 찾지 못했습니다 (${j['status']}).');

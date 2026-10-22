@@ -8,7 +8,9 @@ import time
 
 
 def run(*args, check=True):
-    return subprocess.run(args, check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.strip()
+    print('Running:', ' '.join(args[:4]), flush=True)
+    result = subprocess.run(args, check=check, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600).stdout.strip()
+    return result
 
 
 out = Path('build/startup-smoke')
@@ -44,4 +46,5 @@ try:
         run('xcrun', 'simctl', 'io', udid, 'screenshot', str(out / f'launch-{attempt}.png'))
         print(f'Launch {attempt}: first frame rendered; process still alive after 10 seconds', flush=True)
 finally:
+    run('xcrun', 'simctl', 'io', udid, 'screenshot', str(out / 'last-screen.png'), check=False)
     (out / 'device.log').write_text(run('xcrun', 'simctl', 'spawn', udid, 'log', 'show', '--last', '3m', '--style', 'compact', '--predicate', 'process == "Runner"', check=False))

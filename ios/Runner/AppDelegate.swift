@@ -14,7 +14,7 @@ import UserNotifications
     let channel = FlutterMethodChannel(name: "com.railtime/alerts", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     alertsChannel = channel
     channel.setMethodCallHandler { call, result in
-      #if DEBUG
+      #if targetEnvironment(simulator)
       if call.method == "startupReady" {
         do {
           let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]

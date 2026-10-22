@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'kakao_api.dart';
 import 'planner.dart';
+import 'route_map.dart';
 
 class KakaoPanel extends StatefulWidget {
   const KakaoPanel({
@@ -25,6 +26,16 @@ class _KakaoPanelState extends State<KakaoPanel> {
   List<KakaoRoute> routes = [];
   String message = '';
   bool loading = false;
+  String filter = '전체';
+  KakaoRoute? selected;
+  int generation = 0;
+  List<KakaoRoute> get visible => routes
+      .where(
+        (r) =>
+            filter == '전체' ||
+            (filter == '버스 포함' ? r.hasBus : r.type == 'SUBWAY'),
+      )
+      .toList();
   DateTime? fetched;
 
   Future<void> choose(bool origin) async {
@@ -116,6 +127,8 @@ class _KakaoPanelState extends State<KakaoPanel> {
           end = place;
         }
         routes = [];
+        selected = null;
+        generation++;
         message = '';
         fetched = null;
       });
@@ -128,22 +141,26 @@ class _KakaoPanelState extends State<KakaoPanel> {
       loading = true;
       message = '';
       routes = [];
+      selected = null;
+      fetched = null;
     });
+    final token = ++generation;
     try {
       final result = await KakaoApi(widget.apiKey).routes(start!, end!);
-      if (mounted) {
+      if (mounted && token == generation) {
         setState(() {
           routes = result;
+          selected = visible.firstOrNull;
           fetched = DateTime.now().toUtc();
           if (result.isEmpty) message = '조회 가능한 경로가 없습니다.';
         });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted && token == generation) {
         setState(() => message = e.toString().replaceFirst('Bad state: ', ''));
       }
     } finally {
-      if (mounted) setState(() => loading = false);
+      if (mounted && token == generation) setState(() => loading = false);
     }
   }
 
@@ -152,6 +169,9 @@ class _KakaoPanelState extends State<KakaoPanel> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.apiKey != widget.apiKey) {
       routes = [];
+      selected = null;
+      generation++;
+      loading = false;
       fetched = null;
     }
   }
@@ -164,7 +184,7 @@ class _KakaoPanelState extends State<KakaoPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            '카카오맵 대중교통 경로',
+            '버스·지하철 경로 지도',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const Text('카카오 API로 직접 검색합니다. 혼잡도·좌석 정보는 제공하지 않습니다.'),
@@ -201,15 +221,55 @@ class _KakaoPanelState extends State<KakaoPanel> {
           if (loading) const LinearProgressIndicator(),
           if (message.isNotEmpty) Text(message),
           if (fetched != null) Text('카카오맵 제공 · 조회 ${hm(fetched!)}'),
-          ...routes.take(5).map((r) {
+          if (routes.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              children: ['전체', '버스 포함', '지하철만']
+                  .map(
+                    (value) => ChoiceChip(
+                      label: Text(value),
+                      selected: filter == value,
+                      onSelected: (_) => setState(() {
+                        filter = value;
+                        selected = visible.firstOrNull;
+                      }),
+                    ),
+                  )
+                  .toList(),
+            ),
+          if (routes.isNotEmpty && visible.isEmpty)
+            const Text('이 조건에 맞는 경로가 없습니다. 다른 이동수단을 선택해주세요.'),
+          if (selected != null && start != null && end != null)
+            RouteMap(
+              key: ObjectKey(selected),
+              route: selected!,
+              start: start!,
+              end: end!,
+              apiKey: widget.apiKey,
+            ),
+          ...visible.map((r) {
             final leave = r.leaveBy(widget.deadline, widget.buffer);
             return ExpansionTile(
               tilePadding: EdgeInsets.zero,
-              title: Text('${r.minutes}분 · 환승 ${r.transfers}회'),
+              leading: Icon(
+                r.hasBus ? Icons.directions_bus : Icons.subway,
+                color: selected == r
+                    ? Theme.of(context).colorScheme.primary
+                    : null,
+              ),
+              title: Text('${r.label} · ${r.minutes}분 · 환승 ${r.transfers}회'),
+              onExpansionChanged: (open) {
+                if (open) setState(() => selected = r);
+              },
               subtitle: Text(
                 '${hm(leave)} 출발 권장${leave.isBefore(DateTime.now().toUtc()) ? ' · 출발 시각 지남' : ''}',
               ),
               children: [
+                TextButton.icon(
+                  onPressed: () => setState(() => selected = r),
+                  icon: const Icon(Icons.map_outlined),
+                  label: const Text('이 경로를 지도에 표시'),
+                ),
                 for (final step in r.guidance)
                   ListTile(dense: true, title: Text(step)),
                 TextButton.icon(

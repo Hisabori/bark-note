@@ -39,6 +39,17 @@ jobs:
         env:
           KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: python3 tool/check_kakao_live.py
+      - name: Verify bus geometry, projection and Kakao map
+        env:
+          KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+        run: dart tool/check_map_live.dart
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Route-Map-Verification
+          path: build/map-verification
+          if-no-files-found: warn
+          retention-days: 7
       - name: Inject private transit key
         env:
           SEOUL_KEY: ${{ secrets.RAIL_SEOUL_API_KEY }}
