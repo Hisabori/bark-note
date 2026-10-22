@@ -585,6 +585,14 @@ class _HomeState extends State<Home> {
                 ),
               ),
               const SizedBox(height: 16),
+              KakaoPanel(
+                apiKey: kakaoKey.text,
+                deadline: deadline,
+                buffer: int.tryParse(fields[4].text) ?? 5,
+                onTime: targetTime,
+                onJourneyChanged: cancelReminder,
+                onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
+              ),
               savedRouteCard(),
               liveCard(plan, now),
               card(
@@ -661,13 +669,6 @@ class _HomeState extends State<Home> {
                         (int.tryParse(fields[0].text) ?? -1) <= 240)
                     ? int.parse(fields[0].text)
                     : -1,
-              ),
-              KakaoPanel(
-                apiKey: kakaoKey.text,
-                deadline: deadline,
-                buffer: int.tryParse(fields[4].text) ?? 5,
-                onTime: targetTime,
-                onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
               ),
             ],
 

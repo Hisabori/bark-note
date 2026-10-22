@@ -75,19 +75,18 @@ jobs:
           mkdir -p build/ipa/Payload
           ditto "$APP" build/ipa/Payload/Runner.app
           cd build/ipa
-          /usr/bin/zip -qry Bark-Note-Unified-0.7.0-unsigned.ipa Payload
-          /usr/bin/unzip -t Bark-Note-Unified-0.7.0-unsigned.ipa
-          shasum -a 256 Bark-Note-Unified-0.7.0-unsigned.ipa > SHA256.txt
+          /usr/bin/zip -qry Bark-Note-Unified-0.8.0-unsigned.ipa Payload
+          /usr/bin/unzip -t Bark-Note-Unified-0.8.0-unsigned.ipa
+          shasum -a 256 Bark-Note-Unified-0.8.0-unsigned.ipa > SHA256.txt
           printf '%s\n' 'Unsigned device IPA. Re-sign with Sideloadly before installation. This is not an App Store or TestFlight build.' > INSTALL.txt
       - uses: actions/upload-artifact@v4
         with:
           name: Bark-Note-Unified-IPA
           path: |
-            build/ipa/Bark-Note-Unified-0.7.0-unsigned.ipa
+            build/ipa/Bark-Note-Unified-0.8.0-unsigned.ipa
             build/ipa/SHA256.txt
             build/ipa/INSTALL.txt
           if-no-files-found: error
           retention-days: 7
-
 
 

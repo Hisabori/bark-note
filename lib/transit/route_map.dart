@@ -20,10 +20,12 @@ class RouteMap extends StatefulWidget {
     required this.start,
     required this.end,
     required this.apiKey,
+    this.fullscreen = false,
   });
   final KakaoRoute route;
   final KakaoPlace start, end;
   final String apiKey;
+  final bool fullscreen;
   @override
   State<RouteMap> createState() => _RouteMapState();
 }
@@ -71,29 +73,33 @@ class _RouteMapState extends State<RouteMap> {
               onPressed: () => transform.value = Matrix4.identity(),
               icon: const Icon(Icons.fit_screen),
             ),
-            IconButton(
-              tooltip: '지도 크게 보기',
-              icon: const Icon(Icons.fullscreen),
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute<void>(
-                  builder: (_) => Scaffold(
-                    appBar: AppBar(
-                      title: Text('${widget.start.name} → ${widget.end.name}'),
-                    ),
-                    body: SingleChildScrollView(
-                      padding: const EdgeInsets.all(12),
-                      child: RouteMap(
-                        route: widget.route,
-                        start: widget.start,
-                        end: widget.end,
-                        apiKey: widget.apiKey,
+            if (!widget.fullscreen)
+              IconButton(
+                tooltip: '지도 크게 보기',
+                icon: const Icon(Icons.fullscreen),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute<void>(
+                    builder: (_) => Scaffold(
+                      appBar: AppBar(
+                        title: Text(
+                          '${widget.start.name} → ${widget.end.name}',
+                        ),
+                      ),
+                      body: SingleChildScrollView(
+                        padding: const EdgeInsets.all(12),
+                        child: RouteMap(
+                          route: widget.route,
+                          start: widget.start,
+                          end: widget.end,
+                          apiKey: widget.apiKey,
+                          fullscreen: true,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
           ],
         ),
         if (points.length < 2)

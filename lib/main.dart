@@ -56,7 +56,7 @@ class FeatureHome extends StatelessWidget {
           _feature(
             context,
             Icons.train_outlined,
-            '지하철 · 나갈때',
+            '버스·지하철 · 나갈때',
             '실시간 도착 · 탈 수 있는 열차 · 출발 계획 · 출발 알림',
             const transit.Home(),
           ),
