@@ -5,6 +5,7 @@ on:
     branches: [bark-note-unified]
     paths:
       - 'lib/**'
+      - 'test/**'
       - 'android/**'
       - 'pubspec.*'
       - 'assets/**'
