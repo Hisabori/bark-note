@@ -8,6 +8,9 @@ $ErrorActionPreference = 'Stop'
 $taskKey = Join-Path $SigningDirectory 'release.p12'
 $taskPassword = Join-Path $SigningDirectory 'signing.password'
 if (!(Test-Path -LiteralPath $InputApk)) { throw 'Input APK missing' }
+if ([IO.Path]::GetFullPath($InputApk) -eq [IO.Path]::GetFullPath($OutputApk)) { throw 'Use a separate output APK' }
+$taskBadging = & (Join-Path $AndroidBuildTools 'aapt.exe') dump badging $InputApk
+if ($LASTEXITCODE -ne 0 -or $taskBadging[0] -notmatch "^package: name='com\.barknote\.bark_note\.next'") { throw 'Only a Bark Note Next APK can use this signing identity' }
 if ((Test-Path -LiteralPath $taskKey) -ne (Test-Path -LiteralPath $taskPassword)) { throw 'Incomplete signing identity. Restore its matching key and password; do not replace it.' }
 New-Item -ItemType Directory -Path $SigningDirectory -Force | Out-Null
 if (!(Test-Path -LiteralPath $taskKey)) {
@@ -21,3 +24,4 @@ if (!(Test-Path -LiteralPath $taskKey)) {
 if ($LASTEXITCODE -ne 0) { throw 'Signing failed' }
 & (Join-Path $AndroidBuildTools 'apksigner.bat') verify --verbose --print-certs $OutputApk
 if ($LASTEXITCODE -ne 0) { throw 'Signature verification failed' }
+
