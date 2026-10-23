@@ -4,6 +4,8 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+val barkNext = providers.gradleProperty("barkNext").orNull == "true"
+
 android {
     namespace = "com.barknote.bark_note"
     compileSdk = flutter.compileSdkVersion
@@ -16,7 +18,8 @@ android {
 
     defaultConfig {
         // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.barknote.bark_note"
+        applicationId = if (barkNext) "com.barknote.bark_note.next" else "com.barknote.bark_note"
+        manifestPlaceholders["appLabel"] = if (barkNext) "Bark Note Next" else "Bark Note"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = maxOf(26, flutter.minSdkVersion)
