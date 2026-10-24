@@ -53,6 +53,7 @@ Map<String, dynamic> analyzeWav(Uint8List bytes) {
   final d = ByteData.sublistView(bytes);
   final frame = (rate * .02).round();
   final levels = <double>[];
+  int clippedSamples = 0;
   for (int i = 0; i < samples; i += frame) {
     double sum = 0;
     final end = min(i + frame, samples);
@@ -60,6 +61,7 @@ Map<String, dynamic> analyzeWav(Uint8List bytes) {
       for (int c = 0; c < channels; c++) {
         final v =
             d.getInt16(start + (j * channels + c) * 2, Endian.little) / 32768;
+        if (v.abs() >= 32760 / 32768) clippedSamples++;
         sum += v * v;
       }
     }
@@ -98,6 +100,11 @@ Map<String, dynamic> analyzeWav(Uint8List bytes) {
   final duration = samples / rate;
   return {
     'duration': duration,
+    'quality': {
+      'version': 1,
+      'clippedRatio': clippedSamples / (samples * channels),
+      'quietFrameRatio': levels.where((v) => v < -55).length / levels.length,
+    },
     'peak': levels.reduce(max),
     'threshold': threshold,
     'count': segments.length,

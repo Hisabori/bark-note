@@ -1,3 +1,4 @@
+import 'app_theme.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
@@ -11,6 +12,8 @@ import 'analyzer.dart';
 import 'emotion.dart';
 import 'bark_model.dart';
 import 'bark_result.dart';
+import 'bark_insights.dart';
+import 'breed.dart';
 
 class BarkApp extends StatelessWidget {
   const BarkApp({super.key});
@@ -18,11 +21,7 @@ class BarkApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Bark Note',
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff296b56)),
-      scaffoldBackgroundColor: const Color(0xfff5f4ee),
-    ),
+    theme: buildAppTheme(),
     home: const Home(),
   );
 }
@@ -36,9 +35,11 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with WidgetsBindingObserver {
   final recorder = AudioRecorder();
   final note = TextEditingController();
+  final dog = TextEditingController(text: '우리 강아지');
   List<Map<String, dynamic>> history = [];
   Map<String, dynamic>? result;
   String emotionContext = 'unknown';
+  String breed = 'unknown';
   bool recording = false, busy = false;
   int seconds = 0;
   Timer? timer;
@@ -68,7 +69,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             .map((e) => Map<String, dynamic>.from(e))
             .toList();
         if (mounted) {
-          setState(() => history = h);
+          setState(() {
+            history = h;
+            if (h.isNotEmpty) {
+              dog.text = h.first['dog'] as String? ?? '우리 강아지';
+              breed = normalizeBreed(h.first['breed']);
+            }
+          });
         }
       }
     } catch (_) {
@@ -201,6 +208,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       r['aiError'] =
           'AI 분석을 완료하지 못했습니다. 아래 횟수는 소리 크기로 찾은 후보이며 강아지 짖음 확인 결과가 아닙니다.';
     }
+    r['dog'] = dog.text.trim().isEmpty ? '우리 강아지' : dog.text.trim();
+    r['breed'] = breed;
     r['name'] = name;
     r['date'] = DateTime.now().toIso8601String();
     r['note'] = '';
@@ -219,16 +228,22 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> save() async {
-    if (result == null) {
+    if (result == null || busy || recording) {
       return;
     }
+    setState(() => busy = true);
     final entry = {
       ...result!,
+      'dog': dog.text.trim().isEmpty ? '우리 강아지' : dog.text.trim(),
+      'breed': breed,
       'note': note.text.trim(),
       'emotion': interpretEmotion(result!, emotionContext),
     }..remove('levels');
     final old = [...history];
-    setState(() => history.insert(0, entry));
+    setState(() {
+      history.removeWhere((e) => e['date'] == entry['date']);
+      history.insert(0, entry);
+    });
     try {
       await persist();
       if (mounted) {
@@ -237,8 +252,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ).showSnackBar(const SnackBar(content: Text('기록을 저장했습니다.')));
       }
     } catch (e) {
-      setState(() => history = old);
+      if (mounted) setState(() => history = old);
       error(e);
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
   }
 
@@ -248,6 +265,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     timer?.cancel();
     recorder.dispose();
     note.dispose();
+    dog.dispose();
     super.dispose();
   }
 
@@ -287,6 +305,44 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           const SizedBox(height: 12),
           const Text('소리의 패턴을 살펴보고, 당시 상황을 함께 남겨보세요.'),
           const SizedBox(height: 20),
+          panel(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: dog,
+                  maxLength: 40,
+                  enabled: !busy && !recording,
+                  decoration: const InputDecoration(labelText: '강아지 이름'),
+                  onChanged: (_) => setState(() {}),
+                ),
+                DropdownButtonFormField<String>(
+                  key: ValueKey('breed-$breed'),
+                  initialValue: breed,
+                  isExpanded: true,
+                  decoration: const InputDecoration(labelText: '품종'),
+                  items: dogBreeds.entries
+                      .map(
+                        (e) => DropdownMenuItem(
+                          value: e.key,
+                          child: Text(e.value),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: busy || recording
+                      ? null
+                      : (value) {
+                          if (value != null) setState(() => breed = value);
+                        },
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '직접 선택한 품종으로 기록을 구분합니다. 소리로 품종을 추측하거나 품종만으로 감정을 판단하지 않습니다.',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
           panel(
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -376,6 +432,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   const Text('초록색: 음량 기준을 넘은 소리 · AI 확인 여부와는 별개입니다.'),
                   const SizedBox(height: 12),
                   aiPanel(),
+                  insightsPanel(),
                   const SizedBox(height: 12),
                   Text(
                     (result!['count'] as int) == 0
@@ -428,9 +485,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           ...history.asMap().entries.map(
             (e) => Card(
               child: ListTile(
-                title: Text('${e.value['count']}회 · ${e.value['name']}'),
+                title: Text(
+                  '${e.value['dog'] ?? '우리 강아지'} · ${e.value['verifiedCount'] != null ? 'AI 후보 ${e.value['verifiedCount']}' : '음량 후보 ${e.value['count']}'}회',
+                ),
                 subtitle: Text(
-                  '${e.value['date'].toString().substring(0, 16).replaceAll('T', ' ')}\n${e.value['note']}',
+                  '${breedLabel(e.value['breed'])} · ${e.value['date'].toString().substring(0, 16).replaceAll('T', ' ')}\n${e.value['note']}',
                 ),
                 isThreeLine: true,
                 onTap: recording || busy
@@ -443,38 +502,42 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                                 emotionContexts.containsKey(saved['context'])
                             ? saved['context'] as String
                             : 'unknown';
-                        note.text = e.value['note'] as String;
+                        note.text = e.value['note'] as String? ?? '';
+                        dog.text = e.value['dog'] as String? ?? '우리 강아지';
+                        breed = normalizeBreed(e.value['breed']);
                       }),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: const Text('이 기록을 삭제할까요?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
-                            child: const Text('취소'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.pop(ctx, true),
-                            child: const Text('삭제'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok == true && mounted) {
-                      final old = [...history];
-                      setState(() => history.removeAt(e.key));
-                      try {
-                        await persist();
-                      } catch (err) {
-                        setState(() => history = old);
-                        error(err);
-                      }
-                    }
-                  },
+                  onPressed: busy || recording
+                      ? null
+                      : () async {
+                          final ok = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: const Text('이 기록을 삭제할까요?'),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: const Text('취소'),
+                                ),
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: const Text('삭제'),
+                                ),
+                              ],
+                            ),
+                          );
+                          if (ok == true && mounted) {
+                            final old = [...history];
+                            setState(() => history.removeAt(e.key));
+                            try {
+                              await persist();
+                            } catch (err) {
+                              setState(() => history = old);
+                              error(err);
+                            }
+                          }
+                        },
                 ),
               ),
             ),
@@ -483,6 +546,66 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       ),
     ),
   );
+
+  Widget insightsPanel() {
+    final advice = recordingAdvice(result!);
+    final comparison = compareBarkHistory(
+      result!,
+      history,
+      dog.text,
+      emotionContext,
+      breed: breed,
+    );
+    final breedComparison = compareBarkHistory(
+      result!,
+      history,
+      dog.text,
+      emotionContext,
+      breed: breed,
+      sameDog: false,
+    );
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '녹음 상태와 이전 기록',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          if (result!['quality'] == null)
+            const Text('이전 버전 기록에는 녹음 상태 정보가 없습니다.')
+          else if (advice.isEmpty)
+            const Text('짧은 녹음·과도한 무음·입력 한계 경고가 없습니다. 분석 정확도를 보장하는 검사는 아닙니다.'),
+          for (final item in advice) Text('• $item'),
+          const SizedBox(height: 8),
+          if (comparison == null)
+            const Text('10초 이상 AI 분석 기록이 있으면 같은 이름·품종·상황의 최근 기록 최대 5개와 비교합니다.')
+          else ...[
+            Text(
+              '분당 AI 짖음 후보: 이번 ${comparison.current.toStringAsFixed(1)}회 · 이전 ${comparison.previous.toStringAsFixed(1)}회',
+            ),
+            Text(
+              '같은 강아지·품종·상황의 이전 ${comparison.records}개 기록을 녹음 길이로 가중해 비교했습니다. 녹음 거리와 주변 소음이 다르면 직접 비교하기 어렵습니다.',
+            ),
+          ],
+          const SizedBox(height: 12),
+          Text(
+            '${breedLabel(breed)} · 기기 내 품종별 비교',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          if (!canGroupBreed(breed))
+            const Text('믹스견·기타·품종 모름은 서로 다른 품종을 묶지 않고 개별 기록만 비교합니다.')
+          else if (breedComparison == null)
+            const Text('이 기기에 같은 품종·상황의 이전 AI 분석 기록이 더 필요합니다.')
+          else
+            Text(
+              '이 기기의 같은 품종 최근 ${breedComparison.records}개: 분당 AI 후보 ${breedComparison.previous.toStringAsFixed(1)}회. 품종 전체의 정상 범위나 감정 기준이 아닙니다.',
+            ),
+        ],
+      ),
+    );
+  }
 
   Widget emotionPanel() {
     final interpretation = interpretEmotion(result!, emotionContext);

@@ -1,4 +1,5 @@
-import 'dart:async';
+import '../app_theme.dart';
+import 'live_clock.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -19,11 +20,7 @@ class RailApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     title: '나갈때',
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff20695c)),
-      scaffoldBackgroundColor: const Color(0xfff4f6f3),
-    ),
+    theme: buildAppTheme(),
     home: const Home(),
   );
 }
@@ -52,7 +49,6 @@ class _HomeState extends State<Home> {
   String arrivalDirection = '전체', selectedTrain = '';
   DateTime deadline = DateTime.now().toUtc().add(const Duration(minutes: 90));
   List<Map<String, dynamic>> arrivals = [];
-  Timer? timer;
   DateTime? reminder;
   int generation = 0;
   List<SavedRoute> savedRoutes = [];
@@ -64,11 +60,6 @@ class _HomeState extends State<Home> {
     }
     load();
     loadReminder();
-    timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
   }
 
   Future<File> prefs() async =>
@@ -219,6 +210,7 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> applyRoute(SavedRoute route) async {
+    loading = false;
     generation++;
     await cancelReminder();
     if (!mounted) return;
@@ -409,6 +401,7 @@ class _HomeState extends State<Home> {
           destination.text.trim().isNotEmpty;
       arrivals = [];
       selectedTrain = '';
+      loading = false;
       generation++;
     });
     if (ok == true) {
@@ -455,9 +448,9 @@ class _HomeState extends State<Home> {
         }
       }
     } catch (e) {
-      fail(e);
+      if (mounted && token == generation) fail(e);
     } finally {
-      if (mounted) {
+      if (mounted && token == generation) {
         setState(() => loading = false);
       }
     }
@@ -517,7 +510,6 @@ class _HomeState extends State<Home> {
 
   @override
   void dispose() {
-    timer?.cancel();
     for (final c in [station, destination, apiKey, kakaoKey, ...fields]) {
       c.dispose();
     }
@@ -539,7 +531,6 @@ class _HomeState extends State<Home> {
   @override
   Widget build(BuildContext context) {
     final plan = journey;
-    final now = DateTime.now().toUtc();
     return Scaffold(
       appBar: AppBar(
         title: const Text('나갈때'),
@@ -563,266 +554,282 @@ class _HomeState extends State<Home> {
           NavigationDestination(icon: Icon(Icons.tune), label: '설정'),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-          children: [
-            if (loading) const LinearProgressIndicator(),
-            if (message.isNotEmpty)
-              card(
-                Text(
-                  message,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+      body: LiveClock(
+        enabled: tab != 2,
+        child: KakaoPanel(
+          apiKey: kakaoKey.text,
+          deadline: deadline,
+          buffer: int.tryParse(fields[4].text) ?? 5,
+          onTime: targetTime,
+          onJourneyChanged: cancelReminder,
+          onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
+        ),
+        builder: (context, now, kakaoPanel) => SafeArea(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+            children: [
+              if (loading) const LinearProgressIndicator(),
+              if (message.isNotEmpty)
+                card(
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
                 ),
-              ),
-            if (tab == 0) ...[
-              const Text(
-                '길을 찾고,\n제때 출발해요.',
-                style: TextStyle(
-                  fontSize: 34,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
+              if (tab == 0) ...[
+                const Text(
+                  '길을 찾고,\n제때 출발해요.',
+                  style: TextStyle(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              KakaoPanel(
-                apiKey: kakaoKey.text,
-                deadline: deadline,
-                buffer: int.tryParse(fields[4].text) ?? 5,
-                onTime: targetTime,
-                onJourneyChanged: cancelReminder,
-                onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
-              ),
-              savedRouteCard(),
-              liveCard(plan, now),
-              card(
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    title('나갈 시간'),
-                    if (plan == null) ...[
-                      const Text('출발역·목적지와 평소 이동시간을 입력해 첫 플랜을 만들어보세요.'),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: editPlan,
-                        icon: const Icon(Icons.add),
-                        label: const Text('이동 계획 만들기'),
-                      ),
-                    ] else ...[
-                      Text('${station.text} → ${destination.text}'),
-                      Text(
-                        hm(plan.leaveAt),
-                        style: const TextStyle(
-                          fontSize: 54,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xff20695c),
+                const SizedBox(height: 16),
+                kakaoPanel!,
+                savedRouteCard(),
+                liveCard(plan, now),
+                card(
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      title('나갈 시간'),
+                      if (plan == null) ...[
+                        const Text('출발역·목적지와 평소 이동시간을 입력해 첫 플랜을 만들어보세요.'),
+                        const SizedBox(height: 12),
+                        FilledButton.icon(
+                          onPressed: editPlan,
+                          icon: const Icon(Icons.add),
+                          label: const Text('이동 계획 만들기'),
                         ),
-                      ),
-                      Text(
-                        plan.leaveAt.isBefore(now)
-                            ? '권장 출발 시각이 지났습니다. 이동 계획을 확인해주세요.'
-                            : '약 ${plan.leaveAt.difference(now).inMinutes}분 뒤 출발',
-                      ),
-                      const SizedBox(height: 10),
-                      const Text('입력한 이동시간 기준 · 운행 지연/막차/환승 가능 여부는 반영하지 않습니다.'),
-                      const Divider(height: 28),
-                      Text('목표 도착 ${hm(deadline)} · 총 ${plan.total}분'),
-                      Text(
-                        '도보 ${plan.walkToPlatform} + 이동/환승 ${plan.rideAndTransfer} + 대기 ${plan.wait} + 도착 도보 ${plan.exitWalk} + 여유 ${plan.buffer}분',
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          OutlinedButton(
-                            onPressed: targetTime,
-                            child: const Text('목표 도착 변경'),
+                      ] else ...[
+                        Text('${station.text} → ${destination.text}'),
+                        Text(
+                          hm(plan.leaveAt),
+                          style: const TextStyle(
+                            fontSize: 54,
+                            fontWeight: FontWeight.w800,
+                            color: Color(0xff20695c),
                           ),
-                          FilledButton.icon(
-                            onPressed: () => schedule(plan.leaveAt),
-                            icon: const Icon(Icons.notifications_outlined),
-                            label: const Text('출발 알림 예약'),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (reminder != null) ...[
-                      const Divider(),
-                      Text('${hm(reminder!)} 출발 알림 예약됨 · 시스템에 따라 지연될 수 있습니다.'),
-                      TextButton(
-                        onPressed: cancelReminder,
-                        child: const Text('알림 취소'),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              CrowdPanel(
-                station: station.text,
-                line: selectedTrain.split('|').first,
-                direction: selectedTrain.split('|').length > 1
-                    ? selectedTrain.split('|')[1]
-                    : '',
-                now: now,
-                walk:
-                    ((int.tryParse(fields[0].text) ?? -1) >= 0 &&
-                        (int.tryParse(fields[0].text) ?? -1) <= 240)
-                    ? int.parse(fields[0].text)
-                    : -1,
-              ),
-            ],
-
-            if (tab == 1) ...[
-              title('지금 오는 열차'),
-              TextField(
-                controller: station,
-                decoration: const InputDecoration(
-                  labelText: '조회할 역 이름',
-                  hintText: '서울, 강남 등 (역 접미사 제외)',
-                ),
-                onChanged: (_) => setState(() {
-                  arrivals = [];
-                  selectedTrain = '';
-                  generation++;
-                  confirmed = false;
-                }),
-              ),
-              const SizedBox(height: 12),
-              FilledButton.icon(
-                onPressed: loading ? null : fetchArrivals,
-                icon: const Icon(Icons.refresh),
-                label: const Text('실시간 도착정보 조회'),
-              ),
-              if (arrivals.isEmpty)
-                card(const Text('아직 조회된 열차가 없습니다. 인터넷 연결과 인증키를 확인한 뒤 조회해주세요.')),
-              if (arrivals.isNotEmpty) ...[
-                const Text('출발 계획에 사용할 노선·방향을 열차 카드에서 선택하세요.'),
-                Wrap(
-                  spacing: 6,
-                  children:
-                      {'전체', ...arrivals.map((e) => e['direction'] as String)}
-                          .map(
-                            (v) => ChoiceChip(
-                              label: Text(v),
-                              selected: arrivalDirection == v,
-                              onSelected: (_) =>
-                                  setState(() => arrivalDirection = v),
-                            ),
-                          )
-                          .toList(),
-                ),
-                ...arrivals
-                    .where(
-                      (a) =>
-                          arrivalDirection == '전체' ||
-                          a['direction'] == arrivalDirection,
-                    )
-                    .map((a) {
-                      final t = DateTime.tryParse(a['eta'] as String? ?? '');
-                      final received = DateTime.tryParse(
-                        a['receivedAt'] as String? ?? '',
-                      );
-                      final fresh =
-                          received != null &&
-                          now.difference(received).inSeconds <= 120 &&
-                          a['fresh'] == true;
-                      final seconds = t?.difference(now).inSeconds;
-                      return card(
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        ),
+                        Text(
+                          plan.leaveAt.isBefore(now)
+                              ? '권장 출발 시각이 지났습니다. 이동 계획을 확인해주세요.'
+                              : '약 ${plan.leaveAt.difference(now).inMinutes}분 뒤 출발',
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          '입력한 이동시간 기준 · 운행 지연/막차/환승 가능 여부는 반영하지 않습니다.',
+                        ),
+                        const Divider(height: 28),
+                        Text('목표 도착 ${hm(deadline)} · 총 ${plan.total}분'),
+                        Text(
+                          '도보 ${plan.walkToPlatform} + 이동/환승 ${plan.rideAndTransfer} + 대기 ${plan.wait} + 도착 도보 ${plan.exitWalk} + 여유 ${plan.buffer}분',
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
                           children: [
-                            Text(
-                              '${_lineName(a['line'].toString())} · ${a['direction']}',
+                            OutlinedButton(
+                              onPressed: targetTime,
+                              child: const Text('목표 도착 변경'),
                             ),
-                            Text(
-                              a['destination'].toString(),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 18,
-                              ),
-                            ),
-                            Text(
-                              fresh && seconds != null && seconds > 0
-                                  ? '약 ${seconds ~/ 60}분 ${seconds % 60}초 뒤'
-                                  : a['message'].toString(),
-                              style: const TextStyle(fontSize: 24),
-                            ),
-                            Text(
-                              received == null
-                                  ? '정보 시각 미제공'
-                                  : '제공기관 갱신 ${hm(received)}${fresh ? '' : ' · 오래된 정보 (예상시각 사용 안 함)'}',
-                            ),
-                            const Text(
-                              '종착역·급행 여부를 확인하고 탑승해주세요.',
-                              style: TextStyle(fontSize: 12),
-                            ),
-                            TextButton.icon(
-                              onPressed: () async {
-                                setState(() {
-                                  selectedTrain =
-                                      '${a['line']}|${a['direction']}|${a['terminal']}';
-                                  tab = 0;
-                                });
-                                try {
-                                  await save();
-                                } catch (e) {
-                                  fail(e);
-                                }
-                              },
-                              icon: const Icon(Icons.route),
-                              label: const Text('이 노선·방향으로 출발 계산'),
+                            FilledButton.icon(
+                              onPressed: () => schedule(plan.leaveAt),
+                              icon: const Icon(Icons.notifications_outlined),
+                              label: const Text('출발 알림 예약'),
                             ),
                           ],
                         ),
-                      );
-                    }),
+                      ],
+                      if (reminder != null) ...[
+                        const Divider(),
+                        Text(
+                          '${hm(reminder!)} 출발 알림 예약됨 · 시스템에 따라 지연될 수 있습니다.',
+                        ),
+                        TextButton(
+                          onPressed: cancelReminder,
+                          child: const Text('알림 취소'),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                CrowdPanel(
+                  station: station.text,
+                  line: selectedTrain.split('|').first,
+                  direction: selectedTrain.split('|').length > 1
+                      ? selectedTrain.split('|')[1]
+                      : '',
+                  now: now,
+                  walk:
+                      ((int.tryParse(fields[0].text) ?? -1) >= 0 &&
+                          (int.tryParse(fields[0].text) ?? -1) <= 240)
+                      ? int.parse(fields[0].text)
+                      : -1,
+                ),
+              ],
+
+              if (tab == 1) ...[
+                title('지금 오는 열차'),
+                TextField(
+                  controller: station,
+                  decoration: const InputDecoration(
+                    labelText: '조회할 역 이름',
+                    hintText: '서울, 강남 등 (역 접미사 제외)',
+                  ),
+                  onChanged: (_) => setState(() {
+                    arrivals = [];
+                    selectedTrain = '';
+                    loading = false;
+                    generation++;
+                    confirmed = false;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: loading ? null : fetchArrivals,
+                  icon: const Icon(Icons.refresh),
+                  label: const Text('실시간 도착정보 조회'),
+                ),
+                if (arrivals.isEmpty)
+                  card(
+                    const Text('아직 조회된 열차가 없습니다. 인터넷 연결과 인증키를 확인한 뒤 조회해주세요.'),
+                  ),
+                if (arrivals.isNotEmpty) ...[
+                  const Text('출발 계획에 사용할 노선·방향을 열차 카드에서 선택하세요.'),
+                  Wrap(
+                    spacing: 6,
+                    children:
+                        {'전체', ...arrivals.map((e) => e['direction'] as String)}
+                            .map(
+                              (v) => ChoiceChip(
+                                label: Text(v),
+                                selected: arrivalDirection == v,
+                                onSelected: (_) =>
+                                    setState(() => arrivalDirection = v),
+                              ),
+                            )
+                            .toList(),
+                  ),
+                  ...arrivals
+                      .where(
+                        (a) =>
+                            arrivalDirection == '전체' ||
+                            a['direction'] == arrivalDirection,
+                      )
+                      .map((a) {
+                        final t = DateTime.tryParse(a['eta'] as String? ?? '');
+                        final received = DateTime.tryParse(
+                          a['receivedAt'] as String? ?? '',
+                        );
+                        final fresh =
+                            received != null &&
+                            now.difference(received).inSeconds <= 120 &&
+                            a['fresh'] == true;
+                        final seconds = t?.difference(now).inSeconds;
+                        return card(
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${_lineName(a['line'].toString())} · ${a['direction']}',
+                              ),
+                              Text(
+                                a['destination'].toString(),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 18,
+                                ),
+                              ),
+                              Text(
+                                fresh && seconds != null && seconds > 0
+                                    ? '약 ${seconds ~/ 60}분 ${seconds % 60}초 뒤'
+                                    : a['message'].toString(),
+                                style: const TextStyle(fontSize: 24),
+                              ),
+                              Text(
+                                received == null
+                                    ? '정보 시각 미제공'
+                                    : '제공기관 갱신 ${hm(received)}${fresh ? '' : ' · 오래된 정보 (예상시각 사용 안 함)'}',
+                              ),
+                              const Text(
+                                '종착역·급행 여부를 확인하고 탑승해주세요.',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              TextButton.icon(
+                                onPressed: () async {
+                                  setState(() {
+                                    selectedTrain =
+                                        '${a['line']}|${a['direction']}|${a['terminal']}';
+                                    tab = 0;
+                                  });
+                                  try {
+                                    await save();
+                                  } catch (e) {
+                                    fail(e);
+                                  }
+                                },
+                                icon: const Icon(Icons.route),
+                                label: const Text('이 노선·방향으로 출발 계산'),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                ],
+              ],
+              if (tab == 2) ...[
+                title('휴대폰에서 직접 조회'),
+                TextField(
+                  controller: apiKey,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(labelText: '서울시 지하철 인증키'),
+                ),
+                const Text(
+                  '실시간 열차는 휴대폰에서 서울시 API로 직접 조회합니다. 인터넷 연결이 필요합니다. 인증키는 이 기기에 저장됩니다. 카카오 경로도 휴대폰에서 직접 조회합니다.',
+                ),
+                TextField(
+                  controller: kakaoKey,
+                  obscureText: true,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  decoration: const InputDecoration(
+                    labelText: '카카오 REST API 키',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () async {
+                    try {
+                      await cancelReminder();
+                      await save();
+                      if (mounted) {
+                        setState(() {
+                          arrivals = [];
+                          loading = false;
+                          generation++;
+                          message = '설정을 저장했습니다.';
+                        });
+                      }
+                    } catch (e) {
+                      fail(e);
+                    }
+                  },
+                  child: const Text('설정 저장'),
+                ),
+                card(
+                  const Text(
+                    '지원 범위\n\n수도권 데이터 연결용 첫 버전입니다. 실제 제공 범위는 운영기관 API에 따릅니다.\n\n출발 계산: 직접 입력한 이동시간 기준\n경로 조회: 카카오 API 현재 응답 기준\n칸별 실시간 혼잡도·막차 보장: 제공하지 않습니다.\n\n출발 알림은 저장한 시각의 로컬 알림이며 실시간 운행을 백그라운드에서 재조회하지 않습니다.',
+                  ),
+                ),
               ],
             ],
-            if (tab == 2) ...[
-              title('휴대폰에서 직접 조회'),
-              TextField(
-                controller: apiKey,
-                obscureText: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: const InputDecoration(labelText: '서울시 지하철 인증키'),
-              ),
-              const Text(
-                '실시간 열차는 휴대폰에서 서울시 API로 직접 조회합니다. 인터넷 연결이 필요합니다. 인증키는 이 기기에 저장됩니다. 카카오 경로도 휴대폰에서 직접 조회합니다.',
-              ),
-              TextField(
-                controller: kakaoKey,
-                obscureText: true,
-                autocorrect: false,
-                enableSuggestions: false,
-                decoration: const InputDecoration(labelText: '카카오 REST API 키'),
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () async {
-                  try {
-                    await cancelReminder();
-                    await save();
-                    if (mounted) {
-                      setState(() {
-                        arrivals = [];
-                        generation++;
-                        message = '설정을 저장했습니다.';
-                      });
-                    }
-                  } catch (e) {
-                    fail(e);
-                  }
-                },
-                child: const Text('설정 저장'),
-              ),
-              card(
-                const Text(
-                  '지원 범위\n\n수도권 데이터 연결용 첫 버전입니다. 실제 제공 범위는 운영기관 API에 따릅니다.\n\n출발 계산: 직접 입력한 이동시간 기준\n경로 조회: 카카오 API 현재 응답 기준\n칸별 실시간 혼잡도·막차 보장: 제공하지 않습니다.\n\n출발 알림은 저장한 시각의 로컬 알림이며 실시간 운행을 백그라운드에서 재조회하지 않습니다.',
-                ),
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );
@@ -896,6 +903,7 @@ class _HomeState extends State<Home> {
               arrivals = [];
               selectedTrain = '';
               confirmed = false;
+              loading = false;
               generation++;
             }),
           ),

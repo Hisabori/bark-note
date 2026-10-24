@@ -35,6 +35,7 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: dart tool/check_ai.dart
+      - run: dart tool/check_bark_insights.dart
       - name: Verify Kakao live API
         continue-on-error: true
         env:

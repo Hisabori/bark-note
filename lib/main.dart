@@ -1,3 +1,4 @@
+import 'app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'bark_home.dart' as bark;
@@ -20,11 +21,7 @@ class BarkApp extends StatelessWidget {
   Widget build(BuildContext context) => MaterialApp(
     debugShowCheckedModeBanner: false,
     title: 'Bark Note',
-    theme: ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff296b56)),
-      scaffoldBackgroundColor: const Color(0xfff5f4ee),
-    ),
+    theme: buildAppTheme(),
     home: const FeatureHome(),
   );
 }
@@ -36,7 +33,7 @@ class FeatureHome extends StatelessWidget {
     appBar: AppBar(title: const Text('Bark Note')),
     body: SafeArea(
       child: ListView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
         children: [
           const Text(
             '오늘 필요한 도구',
@@ -49,7 +46,7 @@ class FeatureHome extends StatelessWidget {
             context,
             Icons.pets,
             '강아지 소리 분석',
-            '녹음 · YAMNet 짖음 감지 · 상황별 감정 추정 · 분석 기록',
+            '소리를 녹음하고 상황과 함께 기록해요.',
             const bark.Home(),
           ),
           const SizedBox(height: 16),
@@ -57,7 +54,7 @@ class FeatureHome extends StatelessWidget {
             context,
             Icons.train_outlined,
             '버스·지하철 · 나갈때',
-            '실시간 도착 · 탈 수 있는 열차 · 출발 계획 · 출발 알림',
+            '버스·지하철 경로와 출발할 시간을 확인해요.',
             const transit.Home(),
           ),
           const SizedBox(height: 20),
@@ -76,7 +73,20 @@ class FeatureHome extends StatelessWidget {
   ) => Card(
     child: ListTile(
       contentPadding: const EdgeInsets.all(20),
-      leading: Icon(icon, size: 34),
+      leading: DecoratedBox(
+        decoration: BoxDecoration(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Icon(
+            icon,
+            size: 28,
+            color: Theme.of(context).colorScheme.onPrimaryContainer,
+          ),
+        ),
+      ),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
       subtitle: Padding(
         padding: const EdgeInsets.only(top: 8),
