@@ -542,17 +542,23 @@ class _HomeState extends State<Home> {
           ),
         ],
       ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: tab,
-        onDestinationSelected: (v) => setState(() => tab = v),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.schedule), label: '출발 플랜'),
-          NavigationDestination(
-            icon: Icon(Icons.train_outlined),
-            label: '실시간 열차',
+      bottomNavigationBar: SafeArea(
+        minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(28),
+          child: NavigationBar(
+            selectedIndex: tab,
+            onDestinationSelected: (v) => setState(() => tab = v),
+            destinations: const [
+              NavigationDestination(icon: Icon(Icons.schedule), label: '출발 플랜'),
+              NavigationDestination(
+                icon: Icon(Icons.train_outlined),
+                label: '실시간 열차',
+              ),
+              NavigationDestination(icon: Icon(Icons.tune), label: '설정'),
+            ],
           ),
-          NavigationDestination(icon: Icon(Icons.tune), label: '설정'),
-        ],
+        ),
       ),
       body: LiveClock(
         enabled: tab != 2,

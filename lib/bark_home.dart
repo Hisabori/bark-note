@@ -40,6 +40,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   Map<String, dynamic>? result;
   String emotionContext = 'unknown';
   String breed = 'unknown';
+  String historyQuery = '';
+  Iterable<MapEntry<int, Map<String, dynamic>>>
+  get visibleHistory => history.asMap().entries.where((entry) {
+    final item = entry.value;
+    return '${item['dog'] ?? '우리 강아지'} ${breedLabel(item['breed'])} ${item['note'] ?? ''} ${item['date'] ?? ''}'
+        .toLowerCase()
+        .contains(historyQuery.trim().toLowerCase());
+  });
   bool recording = false, busy = false;
   int seconds = 0;
   Timer? timer;
@@ -287,7 +295,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: const Text('Bark Note'),
+      title: const Text('강아지 소리'),
       backgroundColor: Colors.transparent,
     ),
     body: SafeArea(
@@ -306,8 +314,15 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           const Text('소리의 패턴을 살펴보고, 당시 상황을 함께 남겨보세요.'),
           const SizedBox(height: 20),
           panel(
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            ExpansionTile(
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(top: 12),
+              leading: const Icon(Icons.pets_outlined),
+              title: Text(
+                dog.text.trim().isEmpty ? '우리 강아지' : dog.text.trim(),
+                style: const TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text('${breedLabel(breed)} · 눌러서 프로필 편집'),
               children: [
                 TextField(
                   controller: dog,
@@ -347,11 +362,33 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(
-                  recording ? Icons.graphic_eq : Icons.pets,
-                  size: 56,
-                  color: const Color(0xff296b56),
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.all(22),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: recording
+                          ? const Color(0xfffbe9e7)
+                          : const Color(0xffedf4ef),
+                    ),
+                    child: Icon(
+                      recording
+                          ? Icons.graphic_eq_rounded
+                          : Icons.mic_none_rounded,
+                      size: 52,
+                      color: recording
+                          ? const Color(0xffb3261e)
+                          : const Color(0xff296b56),
+                    ),
+                  ),
                 ),
+                if (recording) ...[
+                  const SizedBox(height: 16),
+                  LinearProgressIndicator(
+                    value: (seconds / 60).clamp(0, 1),
+                    semanticsLabel: '최대 60초 녹음 진행',
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Text(
                   recording ? '$seconds초 녹음 중' : '소리 분석 시작',
@@ -439,16 +476,21 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ? '짖음 후보가 감지되지 않았습니다. 거리나 주변 소음을 확인해보세요.'
                         : '짧은 소리가 ${result!['count']}회 감지되었습니다. 당시 상황과 함께 확인해주세요.',
                   ),
-                  const Divider(height: 28),
-                  ...((result!['segments'] as List)
-                      .take(30)
-                      .map(
-                        (s) => Text(
-                          '${(s['start'] as num).toStringAsFixed(2)}초 — ${(s['end'] as num).toStringAsFixed(2)}초',
-                        ),
-                      )),
-                  if ((result!['segments'] as List).length > 30)
-                    const Text('처음 30구간만 표시합니다. 전체 구간은 기록에 저장됩니다.'),
+                  ExpansionTile(
+                    tilePadding: EdgeInsets.zero,
+                    title: const Text('감지 구간 자세히 보기'),
+                    children: [
+                      ...((result!['segments'] as List)
+                          .take(30)
+                          .map(
+                            (s) => Text(
+                              '${(s['start'] as num).toStringAsFixed(2)}초 — ${(s['end'] as num).toStringAsFixed(2)}초',
+                            ),
+                          )),
+                      if ((result!['segments'] as List).length > 30)
+                        const Text('처음 30구간만 표시합니다. 전체 구간은 기록에 저장됩니다.'),
+                    ],
+                  ),
                   TextField(
                     controller: note,
                     maxLength: 500,
@@ -482,7 +524,18 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               padding: EdgeInsets.all(12),
               child: Text('저장된 기록이 없습니다.'),
             ),
-          ...history.asMap().entries.map(
+          TextField(
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search),
+              labelText: '지난 기록 검색',
+              hintText: '이름, 품종, 메모, 날짜',
+            ),
+            onChanged: (value) => setState(() => historyQuery = value),
+          ),
+          const SizedBox(height: 12),
+          if (history.isNotEmpty && visibleHistory.isEmpty)
+            panel(const Text('검색 결과가 없어요. 다른 이름이나 메모로 찾아보세요.')),
+          ...visibleHistory.map(
             (e) => Card(
               child: ListTile(
                 title: Text(
