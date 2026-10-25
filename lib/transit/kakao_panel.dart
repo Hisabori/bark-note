@@ -5,6 +5,7 @@ import 'place_book.dart';
 import 'kakao_api.dart';
 import 'planner.dart';
 import 'route_map.dart';
+import 'map_explorer.dart';
 
 class KakaoPanel extends StatefulWidget {
   const KakaoPanel({
@@ -214,6 +215,34 @@ class _KakaoPanelState extends State<KakaoPanel> {
       .toList();
   DateTime? fetched;
 
+  Future<void> exploreMap() async {
+    if (loading || restoring) return;
+    final choice = await Navigator.push<MapPlaceChoice>(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            MapExplorer(apiKey: widget.apiKey, center: start ?? end),
+      ),
+    );
+    if (!mounted || choice == null) return;
+    await applyMapPlace(choice.place, choice.origin);
+  }
+
+  Future<void> applyMapPlace(KakaoPlace place, bool origin) async {
+    final token = ++generation;
+    await widget.onJourneyChanged();
+    if (!mounted || token != generation) return;
+    setState(() {
+      if (origin) {
+        start = place;
+      } else {
+        end = place;
+      }
+      clearRoute();
+    });
+    await persistBook();
+  }
+
   Future<void> choose(bool origin) async {
     final query = TextEditingController();
     List<KakaoPlace> places = [];
@@ -295,24 +324,7 @@ class _KakaoPanelState extends State<KakaoPanel> {
     );
     // The dialog's route may still be animating; its controller is collected
     // with the route rather than disposed while a TextField is attached.
-    if (place != null && mounted) {
-      final token = ++generation;
-      await widget.onJourneyChanged();
-      if (!mounted || token != generation) return;
-      setState(() {
-        if (origin) {
-          start = place;
-        } else {
-          end = place;
-        }
-        routes = [];
-        selected = null;
-        generation++;
-        message = '';
-        fetched = null;
-      });
-      await persistBook();
-    }
+    if (place != null && mounted) await applyMapPlace(place, origin);
   }
 
   Future<void> searchRoutes() async {
@@ -372,6 +384,11 @@ class _KakaoPanelState extends State<KakaoPanel> {
           const Text('카카오 API로 직접 검색합니다. 혼잡도·좌석 정보는 제공하지 않습니다.'),
           if (restoring) const LinearProgressIndicator(),
           placeShortcuts(),
+          FilledButton.tonalIcon(
+            onPressed: loading || restoring ? null : exploreMap,
+            icon: const Icon(Icons.map_outlined),
+            label: const Text('지도 · 내 위치 · 주변 장소'),
+          ),
           ListTile(
             contentPadding: EdgeInsets.zero,
             title: Text(start?.name ?? '출발 장소 선택'),

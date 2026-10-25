@@ -14,7 +14,10 @@ def validate(data):
     assert entries[0]['UISceneDelegateClassName'].endswith('.SceneDelegate')
     assert entries[0]['UISceneStoryboardFile'] == 'Main'
     for node in (scene, configs, *entries):
-        assert not {'NSAppTransportSecurity', 'NSMicrophoneUsageDescription', 'NSSupportsLiveActivities'} & node.keys(), 'App-only keys nested in scene metadata'
+        assert not {'NSAppTransportSecurity', 'NSMicrophoneUsageDescription', 'NSLocationWhenInUseUsageDescription', 'NSSupportsLiveActivities'} & node.keys(), 'App-only keys nested in scene metadata'
+    assert data['NSLocationWhenInUseUsageDescription']
+    assert 'location' not in data.get('UIBackgroundModes', [])
+    assert 'NSLocationAlwaysAndWhenInUseUsageDescription' not in data
     assert data['NSMicrophoneUsageDescription']
     assert data['NSSupportsLiveActivities'] is True
 

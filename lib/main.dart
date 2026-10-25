@@ -70,7 +70,7 @@ class FeatureHome extends StatelessWidget {
                 Icons.directions_transit_rounded,
                 '버스·지하철 · 나갈때',
                 '가는 길과 출발할 시간을 한눈에.',
-                '경로 지도 · 실시간 도착 · 출발 알림',
+                '주변 지도 · 내 위치 · 경로 · 출발 알림',
                 const transit.Home(),
                 const Color(0xff295caa),
               ),

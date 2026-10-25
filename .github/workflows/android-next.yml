@@ -41,6 +41,10 @@ jobs:
         env:
           KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: python3 tool/check_kakao_live.py
+      - name: Verify nearby place search
+        env:
+          KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
+        run: dart tool/check_places_live.dart
       - name: Verify bus geometry, projection and Kakao map
         env:
           KAKAO_KEY: ${{ secrets.KAKAO_REST_API_KEY }}

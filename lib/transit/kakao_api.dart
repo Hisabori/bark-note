@@ -12,7 +12,9 @@ class KakaoPlace {
     }
     return KakaoPlace(
       '${j['place_name']}',
-      '${j['road_address_name'] ?? j['address_name'] ?? ''}',
+      '${j['road_address_name'] ?? ''}'.trim().isNotEmpty
+          ? '${j['road_address_name']}'
+          : '${j['address_name'] ?? ''}',
       x,
       y,
     );
@@ -159,13 +161,53 @@ class KakaoApi {
     }
   }
 
-  Future<List<KakaoPlace>> search(String query) async {
+  Future<List<KakaoPlace>> search(
+    String query, {
+    KakaoPlace? near,
+    int radius = 1000,
+  }) async {
     if (query.trim().isEmpty) throw StateError('장소 검색어를 입력해주세요.');
     final j = await get('/v2/local/search/keyword.json', {
       'query': query.trim(),
       'size': '10',
+      if (near != null) ...nearbyParameters(near, radius),
     });
     return (j['documents'] as List)
+        .map((p) => KakaoPlace.fromJson(Map<String, dynamic>.from(p)))
+        .toList();
+  }
+
+  static Map<String, String> nearbyParameters(KakaoPlace center, int radius) {
+    if (!center.x.isFinite ||
+        !center.y.isFinite ||
+        center.x.abs() > 180 ||
+        center.y.abs() > 90 ||
+        radius < 1 ||
+        radius > 20000) {
+      throw const FormatException('주변 검색 중심이나 반경이 올바르지 않습니다.');
+    }
+    return {
+      'x': '${center.x}',
+      'y': '${center.y}',
+      'radius': '$radius',
+      'sort': 'distance',
+    };
+  }
+
+  Future<List<KakaoPlace>> nearby(
+    String category,
+    KakaoPlace center,
+    int radius,
+  ) async {
+    if (!{'SW8', 'CE7', 'CS2', 'FD6', 'PM9'}.contains(category)) {
+      throw const FormatException('지원하지 않는 장소 분류입니다.');
+    }
+    final json = await get('/v2/local/search/category.json', {
+      'category_group_code': category,
+      'size': '15',
+      ...nearbyParameters(center, radius),
+    });
+    return (json['documents'] as List)
         .map((p) => KakaoPlace.fromJson(Map<String, dynamic>.from(p)))
         .toList();
   }
