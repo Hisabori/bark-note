@@ -41,7 +41,7 @@ void main() {
       ),
     );
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.text('버스·지하철 · 나갈때'));
+    await tester.scrollUntilVisible(find.text('버스·지하철 · 나갈때'), 300);
     await tester.pump();
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
