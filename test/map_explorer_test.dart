@@ -161,10 +161,18 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
       expect(locationReads, 0);
-      await tester.scrollUntilVisible(find.text('지하철역'), 200);
+      await tester.scrollUntilVisible(
+        find.text('지하철역'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('지하철역'));
       await tester.pump();
-      await tester.scrollUntilVisible(find.text('도착지로 선택'), 200);
+      await tester.scrollUntilVisible(
+        find.text('도착지로 선택'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
       await tester.tap(find.text('도착지로 선택'));
       await tester.pump(const Duration(milliseconds: 400));
       final choice = await result;
@@ -176,3 +184,4 @@ void main() {
     },
   );
 }
+
