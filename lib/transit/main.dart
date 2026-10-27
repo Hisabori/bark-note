@@ -941,6 +941,7 @@ class _HomeState extends State<Home> {
                                 ),
                                 TextButton.icon(
                                   onPressed: () async {
+                                    invalidateActivity();
                                     setState(() {
                                       selectedTrain =
                                           '${a['line']}|${a['direction']}|${a['terminal']}';
