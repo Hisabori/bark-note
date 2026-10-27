@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 /// Content stays opaque and legible; navigation is visually separated.
 ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
@@ -18,6 +19,9 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     visualDensity: VisualDensity.standard,
     materialTapTargetSize: MaterialTapTargetSize.padded,
     appBarTheme: AppBarTheme(
+      systemOverlayStyle: dark
+          ? SystemUiOverlayStyle.light
+          : SystemUiOverlayStyle.dark,
       backgroundColor: background,
       foregroundColor: scheme.onSurface,
       elevation: 0,
