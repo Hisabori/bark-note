@@ -1,6 +1,6 @@
 import 'app_theme.dart';
 import 'dart:async';
-import 'dart:convert';
+import 'local_store.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -22,6 +22,8 @@ class BarkApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     title: 'Bark Note',
     theme: buildAppTheme(),
+    darkTheme: buildAppTheme(brightness: Brightness.dark),
+    themeMode: ThemeMode.system,
     home: const Home(),
   );
 }
@@ -48,7 +50,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         .toLowerCase()
         .contains(historyQuery.trim().toLowerCase());
   });
-  bool recording = false, busy = false;
+  bool recording = false, busy = false, restoring = true;
   int seconds = 0;
   Timer? timer;
   String? recordingPath;
@@ -69,16 +71,21 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Future<File> store() async =>
       File('${(await getApplicationDocumentsDirectory()).path}/history.json');
+  late final persistence = JsonSnapshotStore(
+    file: store,
+    accepts: (value) => value is List,
+  );
   Future<void> load() async {
     try {
-      final f = await store();
-      if (await f.exists()) {
-        final h = (jsonDecode(await f.readAsString()) as List)
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
+      final saved = await persistence.read();
+      if (saved is List) {
+        final h = saved.map((e) => Map<String, dynamic>.from(e)).toList();
         if (mounted) {
           setState(() {
             history = h;
+            if (persistence.recovered) {
+              status = '백업에서 기록을 복구했습니다. 최근 기록을 확인해주세요.';
+            }
             if (h.isNotEmpty) {
               dog.text = h.first['dog'] as String? ?? '우리 강아지';
               breed = normalizeBreed(h.first['breed']);
@@ -90,15 +97,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       if (mounted) {
         setState(() => status = '이전 기록을 읽지 못했습니다. 새 분석은 가능합니다.');
       }
+    } finally {
+      if (mounted) setState(() => restoring = false);
     }
   }
 
-  Future<void> persist() async {
-    final f = await store();
-    final tmp = File('${f.path}.tmp');
-    await tmp.writeAsString(jsonEncode(history), flush: true);
-    await tmp.rename(f.path);
-  }
+  Future<void> persist() => persistence.write(history);
 
   void error(Object e) {
     if (mounted) {
@@ -110,6 +114,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> start() async {
+    if (busy || recording || restoring) return;
     setState(() => busy = true);
     try {
       if (!await recorder.hasPermission()) {
@@ -125,7 +130,20 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
         ),
         path: recordingPath!,
       );
-      if (!mounted) {
+      final lifecycle = WidgetsBinding.instance.lifecycleState;
+      if (!mounted ||
+          (lifecycle != null && lifecycle != AppLifecycleState.resumed)) {
+        await recorder.stop();
+        final pendingPath = recordingPath;
+        if (pendingPath != null && await File(pendingPath).exists()) {
+          await File(pendingPath).delete();
+        }
+        if (mounted) {
+          setState(() {
+            busy = false;
+            status = '앱을 연 상태에서 녹음을 다시 시작해주세요.';
+          });
+        }
         return;
       }
       setState(() {
@@ -174,6 +192,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> pick() async {
+    if (busy || recording || restoring) return;
     setState(() => busy = true);
     try {
       final picked = await FilePicker.pickFile(
@@ -236,7 +255,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Future<void> save() async {
-    if (result == null || busy || recording) {
+    if (result == null || busy || recording || restoring) {
       return;
     }
     setState(() => busy = true);
@@ -279,7 +298,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   Widget panel(Widget child) => Card(
     elevation: 0,
-    color: Colors.white,
+    color: Theme.of(context).cardColor,
     child: Padding(padding: const EdgeInsets.all(20), child: child),
   );
   Widget metric(String title, String value) => Column(
@@ -327,7 +346,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 TextField(
                   controller: dog,
                   maxLength: 40,
-                  enabled: !busy && !recording,
+                  enabled: !busy && !recording && !restoring,
                   decoration: const InputDecoration(labelText: '강아지 이름'),
                   onChanged: (_) => setState(() {}),
                 ),
@@ -344,7 +363,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                         ),
                       )
                       .toList(),
-                  onChanged: busy || recording
+                  onChanged: busy || recording || restoring
                       ? null
                       : (value) {
                           if (value != null) setState(() => breed = value);
@@ -369,7 +388,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       shape: BoxShape.circle,
                       color: recording
                           ? const Color(0xfffbe9e7)
-                          : const Color(0xffedf4ef),
+                          : Theme.of(context).colorScheme.primaryContainer,
                     ),
                     child: Icon(
                       recording
@@ -378,7 +397,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       size: 52,
                       color: recording
                           ? const Color(0xffb3261e)
-                          : const Color(0xff296b56),
+                          : Theme.of(context).colorScheme.primary,
                     ),
                   ),
                 ),
@@ -400,7 +419,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                 ),
                 const SizedBox(height: 12),
                 FilledButton.icon(
-                  onPressed: busy
+                  onPressed: busy || restoring
                       ? null
                       : recording
                       ? stop
@@ -409,11 +428,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   label: Text(recording ? '녹음 종료 & 분석' : '60초 녹음하기'),
                 ),
                 OutlinedButton.icon(
-                  onPressed: busy || recording ? null : pick,
+                  onPressed: busy || recording || restoring ? null : pick,
                   icon: const Icon(Icons.audio_file),
                   label: const Text('WAV 파일 가져오기'),
                 ),
-                if (busy) const LinearProgressIndicator(),
+                if (busy || restoring) const LinearProgressIndicator(),
                 const SizedBox(height: 8),
                 Text(status, textAlign: TextAlign.center),
               ],
@@ -501,7 +520,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     ),
                   ),
                   FilledButton(
-                    onPressed: busy || recording ? null : save,
+                    onPressed: busy || recording || restoring ? null : save,
                     child: const Text('이 분석 저장하기'),
                   ),
                 ],
@@ -545,7 +564,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   '${breedLabel(e.value['breed'])} · ${e.value['date'].toString().substring(0, 16).replaceAll('T', ' ')}\n${e.value['note']}',
                 ),
                 isThreeLine: true,
-                onTap: recording || busy
+                onTap: recording || busy || restoring
                     ? null
                     : () => setState(() {
                         result = {...e.value};
@@ -561,7 +580,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                       }),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline),
-                  onPressed: busy || recording
+                  onPressed: busy || recording || restoring
                       ? null
                       : () async {
                           final ok = await showDialog<bool>(
@@ -665,7 +684,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xffedf4ef),
+        color: Theme.of(context).colorScheme.primaryContainer,
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -760,7 +779,7 @@ class WavePainter extends CustomPainter {
             levels.length - 1,
           )];
       p.color = v > threshold
-          ? const Color(0xff296b56)
+          ? const Color(0xff138477)
           : const Color(0xffcbd5cd);
       final h = ((v + 60) / 60).clamp(.03, 1) * size.height;
       canvas.drawLine(

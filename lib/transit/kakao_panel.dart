@@ -16,6 +16,8 @@ class KakaoPanel extends StatefulWidget {
     required this.onTime,
     required this.onAlarm,
     required this.onJourneyChanged,
+    this.onActivity,
+    this.activityBusy = false,
   });
   final String apiKey;
   final DateTime deadline;
@@ -23,6 +25,9 @@ class KakaoPanel extends StatefulWidget {
   final VoidCallback onTime;
   final Future<void> Function(DateTime) onAlarm;
   final Future<void> Function() onJourneyChanged;
+  final Future<void> Function(KakaoRoute, KakaoPlace, KakaoPlace, DateTime)?
+  onActivity;
+  final bool activityBusy;
   @override
   State<KakaoPanel> createState() => _KakaoPanelState();
 }
@@ -499,6 +504,16 @@ class _KakaoPanelState extends State<KakaoPanel> {
                   icon: const Icon(Icons.notifications_outlined),
                   label: const Text('이 경로 출발 알림'),
                 ),
+                if (Platform.isIOS &&
+                    widget.onActivity != null &&
+                    fetched != null)
+                  OutlinedButton.icon(
+                    onPressed: widget.activityBusy
+                        ? null
+                        : () => widget.onActivity!(r, start!, end!, fetched!),
+                    icon: const Icon(Icons.phone_iphone),
+                    label: const Text('다이내믹 아일랜드에 표시'),
+                  ),
               ],
             );
           }),

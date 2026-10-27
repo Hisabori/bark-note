@@ -6,7 +6,9 @@ struct DepartureAttributes: ActivityAttributes {
     struct ContentState: Codable, Hashable {
         var leaveAt: Date
         var trainAt: Date
+        var updatedAt: Date?
     }
     var station: String
     var train: String
+    var kind: String?
 }

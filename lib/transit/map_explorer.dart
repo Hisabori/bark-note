@@ -159,8 +159,10 @@ class _MapExplorerState extends State<MapExplorer> {
               fit: BoxFit.fill,
               frameBuilder: (context, child, frame, synchronous) =>
                   frame == null
-                  ? const ColoredBox(
-                      color: Color(0xffe9efed),
+                  ? ColoredBox(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.surfaceContainerHighest,
                       child: Center(child: CircularProgressIndicator()),
                     )
                   : Stack(
@@ -175,7 +177,7 @@ class _MapExplorerState extends State<MapExplorer> {
                       ],
                     ),
               errorBuilder: (context, error, stack) => ColoredBox(
-                color: const Color(0xffe9efed),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:io';
 
 class KakaoPlace {
@@ -150,10 +151,18 @@ class KakaoApi {
           .timeout(const Duration(seconds: 12));
       if (res.statusCode != 200) {
         throw StateError(
-          '카카오 API 오류 (${res.statusCode}). 키·사용 권한·호출 한도를 확인해주세요.',
+          res.statusCode == 429
+              ? '요청이 많아 잠시 조회할 수 없습니다. 잠시 후 다시 시도해주세요.'
+              : res.statusCode >= 500
+              ? '지도 서비스 응답이 지연되고 있습니다. 잠시 후 다시 시도해주세요.'
+              : '카카오 API 오류 (${res.statusCode}). 설정의 인증키와 사용 권한을 확인해주세요.',
         );
       }
       return jsonDecode(raw) as Map<String, dynamic>;
+    } on TimeoutException {
+      throw StateError('지도 조회 시간이 초과됐습니다. 인터넷 연결을 확인하고 다시 시도해주세요.');
+    } on FormatException {
+      throw StateError('지도 서비스 응답을 읽지 못했습니다. 잠시 후 다시 조회해주세요.');
     } on SocketException {
       throw StateError('카카오 API에 연결하지 못했습니다. 인터넷 연결을 확인해주세요.');
     } finally {

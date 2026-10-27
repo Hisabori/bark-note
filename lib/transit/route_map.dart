@@ -144,7 +144,9 @@ class _RouteMapState extends State<RouteMap> {
                           ],
                         ),
                   errorBuilder: (context, error, stack) => ColoredBox(
-                    color: const Color(0xffe9efed),
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.surfaceContainerHighest,
                     child: Center(
                       child: Column(
                         mainAxisSize: MainAxisSize.min,

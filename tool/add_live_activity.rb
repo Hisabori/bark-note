@@ -17,8 +17,8 @@ unless project.targets.any? { |t| t.name == 'DepartureWidget' }
     config.build_settings['INFOPLIST_FILE'] = 'LiveActivity/Info.plist'
     config.build_settings['GENERATE_INFOPLIST_FILE'] = 'NO'
     config.build_settings['SWIFT_VERSION'] = '5.0'
-    config.build_settings['MARKETING_VERSION'] = '0.10.0'
-    config.build_settings['CURRENT_PROJECT_VERSION'] = '13'
+    config.build_settings['MARKETING_VERSION'] = '0.11.0'
+    config.build_settings['CURRENT_PROJECT_VERSION'] = '14'
     config.build_settings['TARGETED_DEVICE_FAMILY'] = '1,2'
     config.build_settings['APPLICATION_EXTENSION_API_ONLY'] = 'YES'
     config.build_settings['SKIP_INSTALL'] = 'YES'
@@ -27,7 +27,7 @@ unless project.targets.any? { |t| t.name == 'DepartureWidget' }
   end
   app.add_dependency(target)
   phase = app.new_copy_files_build_phase('Embed App Extensions')
-  phase.dst_subfolder_spec = '13'
+  phase.dst_subfolder_spec = '14'
   phase.add_file_reference(target.product_reference).settings = {'ATTRIBUTES' => ['RemoveHeadersOnCopy']}
   # Flutter's Thin Binary reads the final app Info.plist. Embed the extension
   # first so Xcode's Info.plist validation cannot create a dependency cycle.
