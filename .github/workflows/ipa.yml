@@ -56,6 +56,21 @@ jobs:
         run: python3 -c 'import os,json; json.dump({"SEOUL_API_KEY":os.environ.get("SEOUL_KEY", ""), "KAKAO_REST_API_KEY":os.environ.get("KAKAO_KEY", "")},open("build-config.json","w"))'
       - name: Build device app without signing
         run: flutter build ios --release --no-codesign --dart-define-from-file=build-config.json
+      - name: Verify and embed Live Activity product
+        shell: bash
+        run: |
+          set -euo pipefail
+          APP="build/ios/iphoneos/Runner.app"
+          find build/ios -maxdepth 5 -name '*.appex' -print
+          if ! test -f "$APP/PlugIns/DepartureWidget.appex/DepartureWidget"; then
+            xcodebuild -project ios/Runner.xcodeproj -target DepartureWidget -configuration Release -sdk iphoneos BUILD_DIR="$PWD/build/ios" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build
+            WIDGET="build/ios/Release-iphoneos/DepartureWidget.appex"
+            test -f "$WIDGET/DepartureWidget" || { echo 'Live Activity executable missing'; exit 1; }
+            mkdir -p "$APP/PlugIns"
+            ditto "$WIDGET" "$APP/PlugIns/DepartureWidget.appex"
+          fi
+          test -f "$APP/Runner" || { echo 'Runner executable missing'; exit 1; }
+          test -f "$APP/PlugIns/DepartureWidget.appex/DepartureWidget"
       - name: Package unsigned IPA
         shell: bash
         run: |
