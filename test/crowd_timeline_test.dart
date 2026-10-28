@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bark_note/transit/crowd_timeline.dart';
@@ -27,6 +29,25 @@ void main() {
       await tester.tap(find.text('07:00'));
       await tester.pump();
       expect(find.text('07:00 · 평균 135.0%'), findsOneWidget);
+      if (const bool.fromEnvironment('CROWD_RENDER_PREVIEW')) {
+        final recorder = ui.PictureRecorder();
+        CrowdCarriagePainter(
+          135,
+        ).paint(ui.Canvas(recorder), const Size(720, 450));
+        final picture = recorder.endRecording();
+        final image = await tester.runAsync(() => picture.toImage(720, 450));
+        final png = await tester.runAsync(
+          () => image!.toByteData(format: ui.ImageByteFormat.png),
+        );
+        // Transport this synthetic, key-free canvas preview through CI logs.
+        // ignore: avoid_print
+        print(
+          'CARRIAGE_RENDER_BASE64:${base64Encode(png!.buffer.asUint8List())}',
+        );
+        image!.dispose();
+        picture.dispose();
+      }
+
       expect(tester.takeException(), isNull);
     },
   );

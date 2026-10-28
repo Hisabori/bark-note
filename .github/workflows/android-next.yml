@@ -33,7 +33,8 @@ jobs:
           echo '10c95ea3eb9a7bb4cb8bddf6feb023250381008177ac162ce169694d05c317de  assets/models/yamnet.tflite' | sha256sum --check
       - run: flutter pub get
       - run: flutter analyze
-      - run: flutter test
+      - name: Run flutter test
+        run: flutter test --dart-define=CROWD_RENDER_PREVIEW=true
       - run: dart tool/check_ai.dart
       - run: dart tool/check_bark_insights.dart
       - name: Verify Kakao live API
