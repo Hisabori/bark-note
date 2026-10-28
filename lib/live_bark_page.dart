@@ -36,7 +36,9 @@ class RecordLiveMicrophone implements LiveMicrophone {
 }
 
 class LiveBarkPage extends StatefulWidget {
-  const LiveBarkPage({super.key});
+  const LiveBarkPage({super.key, this.microphoneFactory, this.scorerFactory});
+  final LiveMicrophone Function()? microphoneFactory;
+  final LiveBarkScorer Function()? scorerFactory;
   @override
   State<LiveBarkPage> createState() => _LiveBarkPageState();
 }
@@ -50,8 +52,8 @@ class _LiveBarkPageState extends State<LiveBarkPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     session = LiveBarkSession(
-      microphone: RecordLiveMicrophone(),
-      scorerFactory: LiveBarkWorker.new,
+      microphone: widget.microphoneFactory?.call() ?? RecordLiveMicrophone(),
+      scorerFactory: widget.scorerFactory ?? LiveBarkWorker.new,
       changed: () {
         if (mounted) setState(() {});
       },

@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/material.dart';
+import 'package:bark_note/live_bark_page.dart';
 import 'package:bark_note/live_bark_core.dart';
 
 Uint8List pcm(int samples) {
@@ -231,4 +233,36 @@ void main() {
     expect(mic.starts, 1);
     await s.dispose();
   });
+  testWidgets(
+    'live page waits for user action and stops capture on background',
+    (tester) async {
+      final mic = FakeMic();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: LiveBarkPage(
+            microphoneFactory: () => mic,
+            scorerFactory: FakeScorer.new,
+          ),
+        ),
+      );
+      expect(mic.starts, 0);
+      await Scrollable.ensureVisible(
+        tester.element(find.text('실시간 분석 시작')),
+        alignment: .3,
+      );
+      await tester.pump();
+      await tester.tap(find.text('실시간 분석 시작'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(mic.starts, 1);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(mic.stops, greaterThan(0));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

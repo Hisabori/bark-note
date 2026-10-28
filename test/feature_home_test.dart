@@ -18,6 +18,11 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.text('길찾기')),
+      alignment: .25,
+    );
+    await tester.pump();
     await tester.tap(find.text('길찾기'));
     await tester.pump();
     // Navigation must not wait for an indeterminate preference-loading
