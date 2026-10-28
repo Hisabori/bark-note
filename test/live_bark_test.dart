@@ -255,7 +255,10 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(mic.starts, 1);
-      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      await tester.runAsync(() async {
+        tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+        await flush();
+      });
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
       expect(mic.stops, greaterThan(0));

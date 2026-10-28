@@ -300,6 +300,17 @@ class LiveBarkSession {
     pcm.clear();
     notify();
     try {
+      await microphone.stop().timeout(const Duration(seconds: 3));
+    } catch (_) {
+      unavailable = true;
+      message = '마이크 정리 중 오류가 발생했습니다. 앱을 다시 열어주세요.';
+      try {
+        await microphone.dispose().timeout(const Duration(seconds: 3));
+      } catch (_) {
+        /* Reported above. */
+      }
+    }
+    try {
       await a?.cancel();
     } catch (_) {
       /* Continue through native stop. */
@@ -308,17 +319,6 @@ class LiveBarkSession {
       await b?.cancel();
     } catch (_) {
       /* Continue through native stop. */
-    }
-    try {
-      await microphone.stop();
-    } catch (_) {
-      unavailable = true;
-      message = '마이크 정리 중 오류가 발생했습니다. 앱을 다시 열어주세요.';
-      try {
-        await microphone.dispose();
-      } catch (_) {
-        /* Reported above. */
-      }
     }
     try {
       await engine?.close();
