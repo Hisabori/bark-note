@@ -12,9 +12,19 @@ Map<String, dynamic> interpretEmotion(
   String context,
 ) {
   final hasAi = audio['ai'] is Map;
-  final segments =
-      (audio[hasAi ? 'verifiedSegments' : 'segments'] as List? ?? [])
-          .cast<Map>();
+  final raw = audio[hasAi ? 'verifiedSegments' : 'segments'];
+  final segments = raw is List
+      ? raw.whereType<Map>().where((s) {
+          final a = s['start'], b = s['end'];
+          return a is num &&
+              b is num &&
+              a.isFinite &&
+              b.isFinite &&
+              a >= 0 &&
+              b > a;
+        }).toList()
+      : <Map>[];
+  segments.sort((a, b) => (a['start'] as num).compareTo(b['start'] as num));
   Map<String, dynamic> output(
     String label,
     String phrase,
@@ -22,7 +32,7 @@ Map<String, dynamic> interpretEmotion(
     List<String> reasons,
     String observe,
   ) => {
-    'version': 1,
+    'version': 2,
     'context': context,
     'label': label,
     'phrase': phrase,
@@ -35,6 +45,11 @@ Map<String, dynamic> interpretEmotion(
     return output('판단 보류', 'AI 소리 확인을 완료하지 못했어요.', [], [
       '짖음 모델을 실행하지 못해 감정을 해석하지 않습니다.',
     ], '다시 녹음하거나 앱을 재시작한 뒤 분석해주세요.');
+  }
+  if (!hasAi) {
+    return output('판단 보류', '소리 종류 확인이 먼저 필요해요.', [], [
+      '이 기록은 음량 후보만 있어 강아지 짖음으로 확인되지 않았습니다.',
+    ], '기존 기록은 그대로 보관됩니다. 새 녹음이나 WAV 파일로 AI 분석을 실행해주세요.');
   }
   if (segments.length < 2) {
     return output('판단 보류', '해석할 소리가 충분하지 않아요.', [], [

@@ -47,8 +47,8 @@ void main(List<String> args) {
   );
   check(
     interpretEmotion({'segments': audio['segments']}, 'play')['label'] ==
-        '기대 / 놀이 흥분 가능성',
-    'old records remain readable',
+        '판단 보류',
+    'legacy records do not acquire unsupported emotion interpretations',
   );
   Uint8List make(int rate, int count, int channels) {
     final b = Uint8List(44 + count * 2 * channels);

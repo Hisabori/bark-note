@@ -1,4 +1,5 @@
 import 'app_theme.dart';
+import 'bark_history.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'bark_home.dart' as bark;
@@ -36,21 +37,13 @@ class FeatureHome extends StatelessWidget {
   Widget build(BuildContext context) {
     final now = DateTime.now();
     final muted = Theme.of(context).colorScheme.onSurfaceVariant;
-    return DecoratedBox(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: [0, .38, .65],
-          colors: [Color(0xffe6e1f1), Color(0xfff3e9e5), Color(0xfff2f3f8)],
-        ),
-      ),
+    return CareSummarySurface(
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: const Text(
             '요약',
-            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+            style: TextStyle(fontSize: 34, fontWeight: FontWeight.w800),
           ),
           backgroundColor: Colors.transparent,
         ),
@@ -182,7 +175,7 @@ class FeatureHome extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    '빠른 시작',
+                    '빠른 기록',
                     style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 12),
@@ -219,6 +212,28 @@ class FeatureHome extends StatelessWidget {
                               '지도 · 경로 · 출발 알림',
                               const transit.Home(),
                               const Color(0xff387df5),
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _feature(
+                              context,
+                              Icons.insights_outlined,
+                              '지난 분석',
+                              '기록과 패턴 돌아보기',
+                              const BarkHistoryPage(),
+                              const Color(0xff8c73d9),
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _feature(
+                              context,
+                              Icons.train_outlined,
+                              '실시간 열차',
+                              '도착 정보 확인',
+                              const transit.Home(initialTab: 1),
+                              const Color(0xff17a89c),
                             ),
                           ),
                         ],
@@ -282,32 +297,41 @@ class FeatureHome extends StatelessWidget {
     clipBehavior: Clip.antiAlias,
     child: InkWell(
       onTap: () => open(context, page),
-      child: Padding(
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: accent, size: 32),
-            const SizedBox(height: 18),
-            Text(
-              title,
-              style: const TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-                height: 1.35,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 100),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Row(
+            children: [
+              Icon(icon, color: accent, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        height: 1.35,
+                      ),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      detail,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        height: 1.4,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              detail,
-              style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 14),
-            Icon(Icons.arrow_forward_rounded, color: accent, size: 20),
-          ],
+            ],
+          ),
         ),
       ),
     ),

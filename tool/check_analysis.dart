@@ -33,6 +33,15 @@ Uint8List fixture({bool silent = false, bool stereo = false}) {
   return b;
 }
 
+Map<String, dynamic> verifiedFixture() {
+  final result = analyzeWav(fixture());
+  return {
+    ...result,
+    'ai': {'threshold': .3},
+    'verifiedSegments': result['segments'],
+  };
+}
+
 void main() {
   void check(bool condition, String name) {
     if (!condition) {
@@ -48,33 +57,36 @@ void main() {
     'silence does not imply happiness',
   );
   check(
-    interpretEmotion(analyzeWav(fixture()), 'unknown')['label'] ==
+    interpretEmotion(verifiedFixture(), 'unknown')['label'] ==
         '흥분 / 경계 / 요구 가능성',
     'unknown context stays ambiguous',
   );
   check(
-    interpretEmotion(analyzeWav(fixture()), 'play')['label'] ==
-        '기대 / 놀이 흥분 가능성',
+    interpretEmotion(verifiedFixture(), 'play')['label'] == '기대 / 놀이 흥분 가능성',
     'play context interpretation',
   );
   check(
-    interpretEmotion(analyzeWav(fixture()), 'visitor')['label'] ==
-        '경계 / 긴장 가능성',
+    interpretEmotion(verifiedFixture(), 'visitor')['label'] == '경계 / 긴장 가능성',
     'visitor context interpretation',
   );
   check(
-    interpretEmotion(analyzeWav(fixture()), 'alone')['label'] ==
-        '불편함 / 접촉 요구 가능성',
+    interpretEmotion(verifiedFixture(), 'alone')['label'] == '불편함 / 접촉 요구 가능성',
     'alone context interpretation',
   );
   check(
-    interpretEmotion(analyzeWav(fixture()), 'invalid')['label'] ==
+    interpretEmotion(verifiedFixture(), 'invalid')['label'] ==
         '흥분 / 경계 / 요구 가능성',
     'invalid context fallback',
   );
   check(
-    !interpretEmotion(analyzeWav(fixture()), 'play').containsKey('probability'),
+    !interpretEmotion(verifiedFixture(), 'play').containsKey('probability'),
     'no fabricated probabilities',
+  );
+  final quality = analyzeWav(fixture())['quality'] as Map;
+  check(
+    (quality['noiseFloorDb'] as num).isFinite &&
+        (quality['levelSpreadDb'] as num) > 0,
+    'finite percentile levels retain burst contrast',
   );
   check(analyzeWav(fixture())['duration'] == 4, 'duration');
   check(analyzeWav(fixture(silent: true))['count'] == 0, 'silence');

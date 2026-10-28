@@ -10,7 +10,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     seedColor: dark ? const Color(0xff76a8ff) : const Color(0xff387df5),
     brightness: brightness,
     surface: card,
-  );
+  ).copyWith(primary: dark ? const Color(0xff76a8ff) : const Color(0xff387df5));
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
@@ -38,7 +38,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -60,11 +60,18 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
         minimumSize: const Size(48, 48),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+        shape: const StadiumBorder(),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
-      style: OutlinedButton.styleFrom(minimumSize: const Size(48, 48)),
+      style: OutlinedButton.styleFrom(
+        minimumSize: const Size(48, 48),
+        side: BorderSide.none,
+        backgroundColor: scheme.primary.withValues(alpha: .08),
+        foregroundColor: scheme.primary,
+        shape: const StadiumBorder(),
+      ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
@@ -118,15 +125,7 @@ class CareIntro extends StatelessWidget {
   final IconData icon;
   @override
   Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(22),
-    decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(28),
-      gradient: const LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        colors: [Color(0xffe7efff), Color(0xffe9f6f3), Color(0xfff8fafc)],
-      ),
-    ),
+    padding: const EdgeInsets.fromLTRB(4, 8, 4, 20),
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -149,7 +148,7 @@ class CareIntro extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            fontSize: 30,
+            fontSize: 34,
             fontWeight: FontWeight.w800,
             height: 1.2,
             color: Color(0xff17212f),
@@ -162,5 +161,32 @@ class CareIntro extends StatelessWidget {
         ),
       ],
     ),
+  );
+}
+
+class CareSummarySurface extends StatelessWidget {
+  const CareSummarySurface({super.key, required this.child});
+  final Widget child;
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      const Positioned.fill(child: ColoredBox(color: Color(0xfff2f3f8))),
+      const Positioned(
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 390,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xffd3c9e8), Color(0xfff0ddd7), Color(0xfff2f3f8)],
+            ),
+          ),
+        ),
+      ),
+      child,
+    ],
   );
 }

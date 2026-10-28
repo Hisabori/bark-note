@@ -1,5 +1,6 @@
 """Launch the real simulator app twice and require a Flutter first frame."""
 import json
+import base64
 import os
 from pathlib import Path
 import re
@@ -45,6 +46,10 @@ try:
         os.kill(pid, 0)
         run('xcrun', 'simctl', 'io', udid, 'screenshot', str(out / f'launch-{attempt}.png'))
         print(f'Launch {attempt}: first frame rendered; process still alive after 10 seconds', flush=True)
+    # Only the clean simulator home is transported here, without private keys.
+    preview = out / 'home-preview.jpg'
+    run('sips', '-s', 'format', 'jpeg', '-s', 'formatOptions', '70', '-Z', '960', str(out / 'launch-2.png'), '--out', str(preview))
+    print('STARTUP_PREVIEW_BASE64:' + base64.b64encode(preview.read_bytes()).decode('ascii'), flush=True)
 finally:
     run('xcrun', 'simctl', 'io', udid, 'screenshot', str(out / 'last-screen.png'), check=False)
     (out / 'device.log').write_text(run('xcrun', 'simctl', 'spawn', udid, 'log', 'show', '--last', '3m', '--style', 'compact', '--predicate', 'process == "Runner"', check=False))

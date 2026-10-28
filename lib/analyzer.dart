@@ -101,7 +101,11 @@ Map<String, dynamic> analyzeWav(Uint8List bytes) {
   return {
     'duration': duration,
     'quality': {
-      'version': 1,
+      'version': 2,
+      'noiseFloorDb': sorted[(sorted.length * .2).floor()],
+      'levelSpreadDb':
+          sorted[(sorted.length * .9).floor()] -
+          sorted[(sorted.length * .2).floor()],
       'clippedRatio': clippedSamples / (samples * channels),
       'quietFrameRatio': levels.where((v) => v < -55).length / levels.length,
     },

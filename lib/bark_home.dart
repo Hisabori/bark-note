@@ -13,6 +13,7 @@ import 'emotion.dart';
 import 'bark_model.dart';
 import 'bark_result.dart';
 import 'bark_insights.dart';
+import 'bark_report.dart';
 import 'breed.dart';
 
 class BarkApp extends StatelessWidget {
@@ -443,6 +444,8 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                     '분석 결과',
                     style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                   ),
+                  const SizedBox(height: 16),
+                  BarkPatternReport(audio: result!),
                   const SizedBox(height: 16),
                   emotionPanel(),
                   const SizedBox(height: 16),

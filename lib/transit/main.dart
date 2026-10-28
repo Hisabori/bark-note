@@ -30,7 +30,9 @@ class RailApp extends StatelessWidget {
 }
 
 class Home extends StatefulWidget {
-  const Home({super.key});
+  const Home({super.key, this.initialTab = 0})
+    : assert(initialTab >= 0 && initialTab <= 2);
+  final int initialTab;
   @override
   State<Home> createState() => _HomeState();
 }
@@ -63,6 +65,7 @@ class _HomeState extends State<Home> {
   @override
   void initState() {
     super.initState();
+    tab = widget.initialTab;
     for (int i = 0; i < 5; i++) {
       fields[i].text = ['10', '30', '5', '5', '5'][i];
     }
