@@ -7,8 +7,9 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(const BarkApp());
+    await tester.scrollUntilVisible(find.text('강아지 소리 분석'), 200, scrollable: find.byType(Scrollable).first);
     expect(find.text('강아지 소리 분석'), findsOneWidget);
-    await tester.ensureVisible(find.text('버스·지하철 · 나갈때'));
+    await tester.scrollUntilVisible(find.text('버스·지하철 · 나갈때'), 200, scrollable: find.byType(Scrollable).first);
     await tester.tap(find.text('버스·지하철 · 나갈때'));
     await tester.pump();
     // Navigation must not wait for an indeterminate preference-loading
