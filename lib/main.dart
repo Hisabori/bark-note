@@ -23,172 +23,290 @@ class BarkApp extends StatelessWidget {
     title: 'Bark Note',
     theme: buildAppTheme(),
     darkTheme: buildAppTheme(brightness: Brightness.dark),
-    themeMode: ThemeMode.system,
+    themeMode: ThemeMode.light,
     home: const FeatureHome(),
   );
 }
 
 class FeatureHome extends StatelessWidget {
   const FeatureHome({super.key});
+  void open(BuildContext context, Widget page) =>
+      Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => page));
   @override
-  Widget build(BuildContext context) => DecoratedBox(
-    decoration: BoxDecoration(
-      gradient: LinearGradient(
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-        stops: const [0, .48, 1],
-        colors: Theme.of(context).brightness == Brightness.dark
-            ? const [Color(0xff342039), Color(0xff1e1020), Color(0xff100c17)]
-            : const [Color(0xffe0d8f2), Color(0xfff6e6df), Color(0xfff3f3f8)],
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return DecoratedBox(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: [0, .38, .65],
+          colors: [Color(0xffe6e1f1), Color(0xfff3e9e5), Color(0xfff2f3f8)],
+        ),
       ),
-    ),
-    child: Scaffold(
-      backgroundColor: Colors.transparent,
-      appBar: AppBar(
-        title: const Text('Bark Note'),
+      child: Scaffold(
         backgroundColor: Colors.transparent,
-      ),
-      body: SafeArea(
-        child: Align(
-          alignment: Alignment.topCenter,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 760),
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-              children: [
-                Text(
-                  '${DateTime.now().month}월 ${DateTime.now().day}일 · 오늘도 함께',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  '함께하는 하루',
-                  style: TextStyle(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w800,
-                    height: 1.15,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  '우리 강아지를 이해하고,\n외출은 여유 있게 준비해요.',
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(height: 1.5),
-                ),
-                const SizedBox(height: 24),
-                _feature(
-                  context,
-                  Icons.pets_rounded,
-                  '강아지 소리 분석',
-                  '소리와 상황을 함께 기록해요.',
-                  '녹음 · 품종별 기록 · 이전 분석 비교',
-                  const bark.Home(),
-                  Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xffa7e4d8)
-                      : const Color(0xff138477),
-                ),
-                const SizedBox(height: 12),
-                _feature(
-                  context,
-                  Icons.directions_transit_rounded,
-                  '버스·지하철 · 나갈때',
-                  '가는 길과 출발할 시간을 한눈에.',
-                  '주변 지도 · 내 위치 · 경로 · 출발 알림',
-                  const transit.Home(),
-                  Theme.of(context).brightness == Brightness.dark
-                      ? const Color(0xffc7b0ff)
-                      : const Color(0xff387df5),
-                ),
-                const SizedBox(height: 20),
-                const Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.phonelink_lock_outlined, size: 18),
-                    SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '소리 분석은 기기 안에서 처리해요. 교통 정보 조회에는 인터넷이 필요해요.',
-                        style: TextStyle(height: 1.5),
-                      ),
-                    ),
-                  ],
+        appBar: AppBar(
+          title: const Text(
+            '요약',
+            style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+          ),
+          backgroundColor: Colors.transparent,
+        ),
+        bottomNavigationBar: SafeArea(
+          minimum: const EdgeInsets.fromLTRB(20, 8, 20, 12),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: Theme.of(context).cardColor,
+              borderRadius: BorderRadius.circular(36),
+              boxShadow: const [
+                BoxShadow(
+                  color: Color(0x0c172d48),
+                  blurRadius: 24,
+                  offset: Offset(0, 8),
                 ),
               ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(36),
+              child: NavigationBar(
+                selectedIndex: 0,
+                onDestinationSelected: (index) {
+                  if (index == 1) open(context, const bark.Home());
+                  if (index == 2) open(context, const transit.Home());
+                },
+                destinations: const [
+                  NavigationDestination(
+                    icon: Icon(Icons.home_outlined),
+                    selectedIcon: Icon(Icons.home_rounded),
+                    label: '오늘',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.pets_outlined),
+                    label: '강아지',
+                  ),
+                  NavigationDestination(
+                    icon: Icon(Icons.directions_transit_outlined),
+                    label: '이동',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        body: SafeArea(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 760),
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                children: [
+                  Text(
+                    '${now.month}월 ${now.day}일 · 오늘도 함께',
+                    style: TextStyle(color: muted, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    '함께하는 하루',
+                    style: TextStyle(
+                      fontSize: 34,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    '소중한 일상, 조금 더 편안하게.',
+                    style: TextStyle(fontSize: 17, color: muted, height: 1.5),
+                  ),
+                  const SizedBox(height: 24),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '나에게 맞춘 오늘',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.favorite_border_rounded,
+                                size: 22,
+                                color: Color(0xff138477),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  '강아지의 소리를 이해하고,\n외출은 여유 있게 준비해요.',
+                                  style: TextStyle(
+                                    fontSize: 17,
+                                    height: 1.5,
+                                    color: muted,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 18),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              TextButton.icon(
+                                onPressed: () =>
+                                    open(context, const bark.Home()),
+                                icon: const Icon(Icons.mic_none_rounded),
+                                label: const Text('소리 기록하기'),
+                              ),
+                              TextButton.icon(
+                                onPressed: () =>
+                                    open(context, const transit.Home()),
+                                icon: const Icon(Icons.near_me_outlined),
+                                label: const Text('나갈 시간 확인'),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    '빠른 시작',
+                    style: TextStyle(fontSize: 23, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 12),
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columns =
+                          constraints.maxWidth >= 350 &&
+                              MediaQuery.textScalerOf(context).scale(14) <= 18
+                          ? 2
+                          : 1;
+                      final width =
+                          (constraints.maxWidth - (columns - 1) * 12) / columns;
+                      return Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          SizedBox(
+                            width: width,
+                            child: _feature(
+                              context,
+                              Icons.pets_outlined,
+                              '강아지 소리 분석',
+                              '녹음 · 품종별 기록',
+                              const bark.Home(),
+                              const Color(0xff138477),
+                            ),
+                          ),
+                          SizedBox(
+                            width: width,
+                            child: _feature(
+                              context,
+                              Icons.directions_transit_rounded,
+                              '버스·지하철 · 나갈때',
+                              '지도 · 경로 · 출발 알림',
+                              const transit.Home(),
+                              const Color(0xff387df5),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(
+                            Icons.phonelink_lock_outlined,
+                            color: Color(0xff138477),
+                            size: 22,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '내 기기에서 안전하게',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '소리 분석은 기기 안에서 처리해요. 교통 정보 조회에는 인터넷이 필요해요.',
+                                  style: TextStyle(color: muted, height: 1.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _feature(
     BuildContext context,
     IconData icon,
     String title,
-    String subtitle,
     String detail,
     Widget page,
-    Color color,
+    Color accent,
   ) => Card(
+    margin: EdgeInsets.zero,
     clipBehavior: Clip.antiAlias,
     child: InkWell(
-      onTap: () => Navigator.of(
-        context,
-      ).push(MaterialPageRoute<void>(builder: (_) => page)),
+      onTap: () => open(context, page),
       child: Padding(
         padding: const EdgeInsets.all(22),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: .1),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Icon(icon, color: color, size: 28),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(subtitle, style: const TextStyle(height: 1.4)),
-                    ],
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.only(top: 12, left: 4),
-                  child: Icon(Icons.chevron_right_rounded),
-                ),
-              ],
+            Icon(icon, color: accent, size: 32),
+            const SizedBox(height: 18),
+            Text(
+              title,
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                height: 1.35,
+              ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Text(
               detail,
               style: TextStyle(
-                color: color,
-                fontWeight: FontWeight.w600,
-                height: 1.4,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                height: 1.5,
               ),
             ),
+            const SizedBox(height: 14),
+            Icon(Icons.arrow_forward_rounded, color: accent, size: 20),
           ],
         ),
       ),

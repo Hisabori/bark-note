@@ -1,4 +1,3 @@
-import 'package:bark_note/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:bark_note/main.dart';
@@ -47,23 +46,17 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
-  testWidgets('OnCare-inspired dark surfaces retain readable text', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: buildAppTheme(brightness: Brightness.dark),
-        home: const FeatureHome(),
-      ),
-    );
-    final theme = Theme.of(tester.element(find.text('함께하는 하루')));
-    expect(theme.brightness, Brightness.dark);
-    expect(theme.cardColor, isNot(Colors.white));
-    expect(
-      theme.colorScheme.onSurface.computeLuminance(),
-      greaterThan(theme.cardColor.computeLuminance()),
-    );
-    expect(tester.takeException(), isNull);
-    await tester.pumpWidget(const SizedBox.shrink());
-  });
+  testWidgets(
+    'normal mode remains bright when the device uses dark appearance',
+    (tester) async {
+      tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+      await tester.pumpWidget(const BarkApp());
+      final theme = Theme.of(tester.element(find.text('함께하는 하루')));
+      expect(theme.brightness, Brightness.light);
+      expect(theme.cardColor, Colors.white);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+    },
+  );
 }

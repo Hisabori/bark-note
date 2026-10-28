@@ -24,7 +24,7 @@ class RailApp extends StatelessWidget {
     title: '나갈때',
     theme: buildAppTheme(),
     darkTheme: buildAppTheme(brightness: Brightness.dark),
-    themeMode: ThemeMode.system,
+    themeMode: ThemeMode.light,
     home: const Home(),
   );
 }
@@ -750,15 +750,13 @@ class _HomeState extends State<Home> {
                     ),
                   ),
                 if (tab == 0) ...[
-                  const Text(
-                    '길을 찾고,\n제때 출발해요.',
-                    style: TextStyle(
-                      fontSize: 34,
-                      fontWeight: FontWeight.w800,
-                      height: 1.2,
-                    ),
+                  const CareIntro(
+                    label: '여유로운 외출',
+                    title: '길을 찾고,\n제때 출발해요.',
+                    subtitle: '가는 길과 출발할 시간을 한눈에 확인해요.',
+                    icon: Icons.near_me_outlined,
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   if (Platform.isIOS) activityCard(now),
                   kakaoPanel!,
                   savedRouteCard(),

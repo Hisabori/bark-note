@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'crowd_data.dart';
+import 'crowd_timeline.dart';
 import 'planner.dart';
 
 class CrowdPanel extends StatefulWidget {
@@ -170,6 +171,13 @@ class _CrowdPanelState extends State<CrowdPanel> {
                     Text(
                       '${board.hour.toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')} 시간대 · 도보 ${widget.walk}분 + 여유 1분 반영',
                     ),
+                  if (value != null && later.any((e) => e.value < value)) ...[
+                    const SizedBox(height: 12),
+                    const Text(
+                      '이후 2시간 중 더 여유로운 시간대',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ],
                   if (value != null)
                     ...later
                         .where((e) => e.value < value)
@@ -179,7 +187,15 @@ class _CrowdPanelState extends State<CrowdPanel> {
                             '${(e.key ~/ 60).toString().padLeft(2, '0')}:${(e.key % 60).toString().padLeft(2, '0')} 탑승 시간대 평균 ${e.value.toStringAsFixed(1)}% · 현재 시간대보다 낮음',
                           ),
                         ),
-                  const SizedBox(height: 8),
+                  if (profile != null)
+                    CrowdTimeline(
+                      key: ValueKey(
+                        '${profile.station}|${profile.line}|${profile.day}|${profile.direction}',
+                      ),
+                      slots: profile.slots,
+                      boardMinute: sameDate ? minute : -1,
+                    ),
+                  const SizedBox(height: 14),
                   const Text(
                     '출처: 서울교통공사 · 공공데이터포털 15071311. 정원 대비 승차인원 비율이며, 좌석만 모두 차면 약 34%입니다.',
                     style: TextStyle(fontSize: 12),

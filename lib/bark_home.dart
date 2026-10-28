@@ -23,7 +23,7 @@ class BarkApp extends StatelessWidget {
     title: 'Bark Note',
     theme: buildAppTheme(),
     darkTheme: buildAppTheme(brightness: Brightness.dark),
-    themeMode: ThemeMode.system,
+    themeMode: ThemeMode.light,
     home: const Home(),
   );
 }
@@ -321,16 +321,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          const Text(
-            '우리 강아지의\n소리를 기록해요.',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-            ),
+          const CareIntro(
+            label: '강아지와 함께',
+            title: '우리 강아지의\n소리를 기록해요.',
+            subtitle: '소리의 패턴을 살펴보고, 당시 상황을 함께 남겨보세요.',
+            icon: Icons.pets_outlined,
           ),
-          const SizedBox(height: 12),
-          const Text('소리의 패턴을 살펴보고, 당시 상황을 함께 남겨보세요.'),
           const SizedBox(height: 20),
           panel(
             ExpansionTile(
