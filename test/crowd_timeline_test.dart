@@ -17,9 +17,13 @@ void main() {
       );
       expect(find.text('06:00 · 평균 0.0% · 예상 탑승 시간대'), findsOneWidget);
       expect(find.byKey(const ValueKey('crowd-carriage')), findsOneWidget);
+      await tester.ensureVisible(find.text('06:30'));
+      await tester.pump();
       await tester.tap(find.text('06:30'));
       await tester.pump();
       expect(find.text('06:30 · 통계 없음'), findsOneWidget);
+      await tester.ensureVisible(find.text('07:00'));
+      await tester.pump();
       await tester.tap(find.text('07:00'));
       await tester.pump();
       expect(find.text('07:00 · 평균 135.0%'), findsOneWidget);
