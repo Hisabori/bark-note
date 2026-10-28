@@ -146,8 +146,9 @@ void liveBarkEntry(List<dynamic> args) async {
       options: options,
     );
     if (interpreter.getInputTensor(0).shape.join(',') != '15600' ||
-        interpreter.getOutputTensor(0).shape.join(',') != '1,521')
+        interpreter.getOutputTensor(0).shape.join(',') != '1,521') {
       throw StateError('모델 형식 오류');
+    }
     final output = [List<double>.filled(521, 0)];
     parent.send(channel.sendPort);
     await for (final message in channel) {

@@ -13,7 +13,7 @@ class RecordLiveMicrophone implements LiveMicrophone {
   @override
   Future<Stream<Uint8List>> start() => recorder.startStream(
     const RecordConfig(
-      encoder: AudioEncoder.pcm16,
+      encoder: AudioEncoder.pcm16bits,
       sampleRate: 16000,
       numChannels: 1,
       streamBufferSize: 3200,

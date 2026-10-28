@@ -156,8 +156,9 @@ class LiveBarkSession {
         opening ||
         starting ||
         running ||
-        stopping != null)
+        stopping != null) {
       return;
+    }
     final token = ++generation;
     starting = true;
     opening = true;
