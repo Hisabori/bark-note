@@ -52,13 +52,14 @@ class _CrowdTimelineState extends State<CrowdTimeline> {
         oldWidget.boardMinute != widget.boardMinute) {
       selected = initial;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && scroll.hasClients)
+        if (mounted && scroll.hasClients) {
           scroll.jumpTo(
             math
                 .max(0, times.indexOf(initial ?? -1) * 64 - 64)
                 .toDouble()
                 .clamp(0, scroll.position.maxScrollExtent),
           );
+        }
       });
     }
   }
