@@ -27,19 +27,18 @@ BarkPatternSummary? summarizeBarkPatterns(Map<String, dynamic> audio) {
   if (duration is! num || !duration.isFinite || duration <= 0) return null;
   final verified = audio['ai'] is Map && audio['aiError'] == null;
   final raw = audio[verified ? 'verifiedSegments' : 'segments'];
+  if (raw is! List) return null;
   final events = <(double, double)>[];
-  if (raw is List) {
-    for (final item in raw.whereType<Map>()) {
-      final a = item['start'], b = item['end'];
-      if (a is num &&
-          b is num &&
-          a.isFinite &&
-          b.isFinite &&
-          a >= 0 &&
-          b > a &&
-          b <= duration) {
-        events.add((a.toDouble(), b.toDouble()));
-      }
+  for (final item in raw.whereType<Map>()) {
+    final a = item['start'], b = item['end'];
+    if (a is num &&
+        b is num &&
+        a.isFinite &&
+        b.isFinite &&
+        a >= 0 &&
+        b > a &&
+        b <= duration) {
+      events.add((a.toDouble(), b.toDouble()));
     }
   }
   events.sort((a, b) => a.$1.compareTo(b.$1));

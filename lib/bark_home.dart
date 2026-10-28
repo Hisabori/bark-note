@@ -14,6 +14,7 @@ import 'bark_model.dart';
 import 'bark_result.dart';
 import 'bark_insights.dart';
 import 'bark_report.dart';
+import 'live_bark_page.dart';
 import 'breed.dart';
 
 class BarkApp extends StatelessWidget {
@@ -428,6 +429,17 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   onPressed: busy || recording || restoring ? null : pick,
                   icon: const Icon(Icons.audio_file),
                   label: const Text('WAV 파일 가져오기'),
+                ),
+                TextButton.icon(
+                  onPressed: busy || recording || restoring
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const LiveBarkPage(),
+                          ),
+                        ),
+                  icon: const Icon(Icons.hearing_rounded),
+                  label: const Text('실시간으로 소리 확인'),
                 ),
                 if (busy || restoring) const LinearProgressIndicator(),
                 const SizedBox(height: 8),

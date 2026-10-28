@@ -30,6 +30,7 @@ void main() {
     'invalid events are omitted and invalid recording duration is explicit',
     () {
       expect(summarizeBarkPatterns({'duration': double.nan}), isNull);
+      expect(summarizeBarkPatterns({'duration': 20}), isNull);
       final r = summarizeBarkPatterns({
         'duration': 5,
         'segments': [

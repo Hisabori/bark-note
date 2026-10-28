@@ -1,5 +1,6 @@
 import 'app_theme.dart';
 import 'bark_history.dart';
+import 'live_bark_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'bark_home.dart' as bark;
@@ -197,7 +198,7 @@ class FeatureHome extends StatelessWidget {
                             child: _feature(
                               context,
                               Icons.pets_outlined,
-                              '강아지 소리 분석',
+                              '소리 분석',
                               '녹음 · 품종별 기록',
                               const bark.Home(),
                               const Color(0xff138477),
@@ -208,7 +209,7 @@ class FeatureHome extends StatelessWidget {
                             child: _feature(
                               context,
                               Icons.directions_transit_rounded,
-                              '버스·지하철 · 나갈때',
+                              '길찾기',
                               '지도 · 경로 · 출발 알림',
                               const transit.Home(),
                               const Color(0xff387df5),
@@ -229,10 +230,10 @@ class FeatureHome extends StatelessWidget {
                             width: width,
                             child: _feature(
                               context,
-                              Icons.train_outlined,
-                              '실시간 열차',
-                              '도착 정보 확인',
-                              const transit.Home(initialTab: 1),
+                              Icons.hearing_rounded,
+                              '실시간 분석',
+                              '듣는 동안 바로 확인',
+                              const LiveBarkPage(),
                               const Color(0xff17a89c),
                             ),
                           ),
