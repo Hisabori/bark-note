@@ -4,7 +4,7 @@ import 'package:bark_note/transit/crowd_timeline.dart';
 
 void main() {
   testWidgets(
-    'chart keeps missing slots distinct from real zero and supports selection',
+    'carriage keeps missing slots distinct from real zero and supports selection',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -16,6 +16,7 @@ void main() {
         ),
       );
       expect(find.text('06:00 · 평균 0.0% · 예상 탑승 시간대'), findsOneWidget);
+      expect(find.byKey(const ValueKey('crowd-carriage')), findsOneWidget);
       await tester.tap(find.text('06:30'));
       await tester.pump();
       expect(find.text('06:30 · 통계 없음'), findsOneWidget);
@@ -25,7 +26,7 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
-  testWidgets('large text chart stays bounded and empty data is explicit', (
+  testWidgets('large text carriage stays bounded and empty data is explicit', (
     tester,
   ) async {
     await tester.pumpWidget(
