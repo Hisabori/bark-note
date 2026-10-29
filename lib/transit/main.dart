@@ -90,8 +90,9 @@ class _HomeState extends State<Home> {
       if (persistence.recovered) message = '백업에서 설정을 복구했습니다. 경로와 알림을 확인해주세요.';
       final preparation = p['departurePreparation'];
       final margin = p['boardingMargin'];
-      if (preparation is int && {0, 5, 10, 15}.contains(preparation))
+      if (preparation is int && {0, 5, 10, 15}.contains(preparation)) {
         departurePreparation = preparation;
+      }
       if (margin is int && {1, 3, 5}.contains(margin)) boardingMargin = margin;
       final saved = p['savedRoutes'];
       if (saved is List) {
