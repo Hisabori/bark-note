@@ -664,7 +664,11 @@ class _HomeState extends State<Home> {
     }
   }
 
-  Future<void> schedule(DateTime time, {String? basis}) async {
+  Future<void> schedule(
+    DateTime time, {
+    String? basis,
+    bool preparation = false,
+  }) async {
     if (!time.isAfter(DateTime.now().toUtc())) {
       fail('이미 지난 출발 시각입니다. 목표 시각을 변경해주세요.');
       return;
@@ -672,7 +676,7 @@ class _HomeState extends State<Home> {
     try {
       final granted = await alerts.invokeMethod<bool>('schedule', {
         'epoch': time.millisecondsSinceEpoch,
-        'title': '이제 나갈 시간이에요',
+        'title': preparation ? '외출 준비를 시작해요' : '이제 나갈 시간이에요',
         'body': basis ?? '입력한 이동시간 기준으로 출발할 시간입니다.',
       });
       if (granted != true) {
@@ -835,7 +839,7 @@ class _HomeState extends State<Home> {
                         if (reminder != null) ...[
                           const Divider(),
                           Text(
-                            '${hm(reminder!)} 출발 알림 예약됨 · 시스템에 따라 지연될 수 있습니다.',
+                            '${hm(reminder!)} 외출 알림 예약됨 · 시스템에 따라 지연될 수 있습니다.',
                           ),
                           TextButton(
                             onPressed: cancelReminder,
@@ -1234,6 +1238,7 @@ class _HomeState extends State<Home> {
               ),
             ),
           if (chosen != null) ...[
+            const Text('알림은 하나만 예약됩니다. 새 알림을 예약하면 이전 알림을 바꿉니다.'),
             Text(
               '${hm(chosen.value.leaveBy)}까지 출발',
               style: const TextStyle(fontSize: 30, fontWeight: FontWeight.bold),
@@ -1250,6 +1255,7 @@ class _HomeState extends State<Home> {
                     onPressed: chosen.value.prepareBy.isAfter(now)
                         ? () => schedule(
                             chosen.value.prepareBy,
+                            preparation: true,
                             basis: '외출 준비를 시작할 시간입니다. 열차 정보는 앱에서 다시 확인해주세요.',
                           )
                         : null,
