@@ -10,6 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'planner.dart';
 import 'transit_api.dart';
 import 'live_plan.dart';
+import 'departure_brief.dart';
 import 'kakao_panel.dart';
 import 'crowd_panel.dart';
 import 'saved_route.dart';
@@ -50,6 +51,7 @@ class _HomeState extends State<Home> {
   final fields = List.generate(5, (_) => TextEditingController());
   final labels = ['출발지 → 승강장', '열차 이동 + 환승', '예상 열차 대기', '도착역 → 목적지', '추가 여유'];
   int tab = 0;
+  int departurePreparation = 0, boardingMargin = 1;
   bool confirmed = false, loading = false, restoring = true;
   bool activityActive = false, activityBusy = false;
   String activityKind = '', activityLabel = '';
@@ -86,6 +88,11 @@ class _HomeState extends State<Home> {
       if (value is! Map) return;
       final p = value;
       if (persistence.recovered) message = '백업에서 설정을 복구했습니다. 경로와 알림을 확인해주세요.';
+      final preparation = p['departurePreparation'];
+      final margin = p['boardingMargin'];
+      if (preparation is int && {0, 5, 10, 15}.contains(preparation))
+        departurePreparation = preparation;
+      if (margin is int && {1, 3, 5}.contains(margin)) boardingMargin = margin;
       final saved = p['savedRoutes'];
       if (saved is List) {
         savedRoutes = saved
@@ -129,6 +136,8 @@ class _HomeState extends State<Home> {
   }
 
   Future<void> save() => persistence.write({
+    'departurePreparation': departurePreparation,
+    'boardingMargin': boardingMargin,
     'station': station.text,
     'destination': destination.text,
     'apiKey': apiKey.text,
@@ -587,7 +596,13 @@ class _HomeState extends State<Home> {
             .toList()
           ..sort((a, b) => '${a['eta']}'.compareTo('${b['eta']}'));
     for (final train in candidates) {
-      final estimate = boardingEstimate(train, walk, now);
+      final estimate = boardingEstimate(
+        train,
+        walk,
+        now,
+        marginMinutes: boardingMargin,
+        preparationMinutes: departurePreparation,
+      );
       if (estimate != null &&
           estimate.canCatch &&
           estimate.leaveBy.isAfter(now)) {
@@ -761,9 +776,9 @@ class _HomeState extends State<Home> {
                   ),
                   const SizedBox(height: 20),
                   if (Platform.isIOS) activityCard(now),
+                  liveCard(plan, now),
                   kakaoPanel!,
                   savedRouteCard(),
-                  liveCard(plan, now),
                   card(
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1037,6 +1052,20 @@ class _HomeState extends State<Home> {
     }
   }
 
+  Future<void> updateDepartureOptions({int? preparation, int? margin}) async {
+    invalidateActivity();
+    setState(() {
+      departurePreparation = preparation ?? departurePreparation;
+      boardingMargin = margin ?? boardingMargin;
+    });
+    await cancelReminder();
+    try {
+      await save();
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   Widget liveCard(Journey? plan, DateTime now) {
     final groups = <String, Map<String, dynamic>>{};
     for (final train in arrivals) {
@@ -1060,7 +1089,13 @@ class _HomeState extends State<Home> {
     final usable = <MapEntry<Map<String, dynamic>, BoardingEstimate>>[];
     if (walk != null) {
       for (final train in matching) {
-        final estimate = boardingEstimate(train, walk, now);
+        final estimate = boardingEstimate(
+          train,
+          walk,
+          now,
+          marginMinutes: boardingMargin,
+          preparationMinutes: departurePreparation,
+        );
         if (estimate != null) usable.add(MapEntry(train, estimate));
       }
     }
@@ -1097,6 +1132,32 @@ class _HomeState extends State<Home> {
               invalidateActivity();
               setState(() {});
             },
+          ),
+          const SizedBox(height: 12),
+          const Text('외출 준비 시간'),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final minutes in [0, 5, 10, 15])
+                ChoiceChip(
+                  label: Text('$minutes분'),
+                  selected: departurePreparation == minutes,
+                  onSelected: (_) =>
+                      updateDepartureOptions(preparation: minutes),
+                ),
+            ],
+          ),
+          const Text('승강장 탑승 여유'),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final minutes in [1, 3, 5])
+                ChoiceChip(
+                  label: Text('$minutes분'),
+                  selected: boardingMargin == minutes,
+                  onSelected: (_) => updateDepartureOptions(margin: minutes),
+                ),
+            ],
           ),
           OutlinedButton.icon(
             onPressed: loading ? null : fetchArrivals,
@@ -1137,22 +1198,40 @@ class _HomeState extends State<Home> {
             const Text(
               '계산 가능한 최신 도착예측이 없습니다. 2분이 지난 정보나 도착 시각이 없는 열차는 다시 조회해주세요.',
             ),
+          if (chosen != null)
+            DepartureBrief(
+              estimate: chosen.value,
+              now: now,
+              received: DateTime.parse(chosen.key['receivedAt'] as String),
+              preparation: departurePreparation,
+              walk: walk!,
+              margin: boardingMargin,
+              journey: plan,
+            ),
+          if (usable.isNotEmpty && chosen == null)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Text('조회된 열차는 준비·도보시간이 부족해요. 뛰지 말고 다음 열차를 다시 확인해주세요.'),
+            ),
           for (final entry in usable.take(3))
             ListTile(
               contentPadding: EdgeInsets.zero,
               leading: Icon(
-                entry.value.canCatch
-                    ? Icons.check_circle_outline
-                    : Icons.directions_walk,
-                color: entry.value.canCatch ? Colors.green : Colors.orange,
+                entry.value.canCatch ? Icons.train : Icons.directions_walk,
+                color: entry.value.canCatch ? Colors.teal : Colors.orange,
               ),
               title: Text(
-                entry.value.canCatch ? '지금 출발하면 탑승 가능 예상' : '이 열차는 도보시간이 부족해요',
+                '열차 ${hm(entry.value.eta)} · ${identical(entry, chosen)
+                    ? '추천'
+                    : entry.value.canCatch
+                    ? '탑승 가능 예상'
+                    : '시간 부족'}',
               ),
               subtitle: Text(
-                '열차 ${hm(entry.value.eta)} · 승강장 준비 ${hm(entry.value.readyAt)}\n${entry.value.canCatch ? '탑승 여유' : '부족한 시간'} ${(entry.value.spareSeconds.abs() / 60).ceil()}분',
+                entry.value.canCatch
+                    ? '준비·도보·탑승 여유 반영 후 ${departureCountdown(Duration(seconds: entry.value.spareSeconds))} 여유'
+                    : '${departureCountdown(Duration(seconds: entry.value.spareSeconds.abs()))} 부족',
               ),
-              isThreeLine: true,
             ),
           if (chosen != null) ...[
             Text(
@@ -1166,6 +1245,17 @@ class _HomeState extends State<Home> {
             Wrap(
               spacing: 8,
               children: [
+                if (departurePreparation > 0)
+                  OutlinedButton.icon(
+                    onPressed: chosen.value.prepareBy.isAfter(now)
+                        ? () => schedule(
+                            chosen.value.prepareBy,
+                            basis: '외출 준비를 시작할 시간입니다. 열차 정보는 앱에서 다시 확인해주세요.',
+                          )
+                        : null,
+                    icon: const Icon(Icons.checkroom_outlined),
+                    label: const Text('준비 시작 알림'),
+                  ),
                 FilledButton.icon(
                   onPressed: chosen.value.leaveBy.isAfter(now)
                       ? () => schedule(
@@ -1193,7 +1283,7 @@ class _HomeState extends State<Home> {
               child: const Text('실시간 현황 종료'),
             ),
           const Text(
-            '승강장 도보 + 탑승 여유 1분을 반영한 예측입니다. 종착역·급행 정차 여부는 확인해주세요. 실시간 현황은 마지막 조회 예측의 카운트다운이며 앱 종료 후 운행정보를 새로 조회하지 않습니다.',
+            '준비·승강장 도보·선택한 탑승 여유를 반영한 예측입니다. 종착역·급행 정차 여부는 확인해주세요. 실시간 현황은 마지막 조회 예측의 카운트다운이며 앱 종료 후 운행정보를 새로 조회하지 않습니다.',
           ),
         ],
       ),

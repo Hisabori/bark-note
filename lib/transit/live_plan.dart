@@ -1,8 +1,13 @@
 import 'planner.dart';
 
 class BoardingEstimate {
-  const BoardingEstimate(this.eta, this.leaveBy, this.readyAt);
-  final DateTime eta, leaveBy, readyAt;
+  const BoardingEstimate(
+    this.eta,
+    this.leaveBy,
+    this.readyAt, {
+    DateTime? prepareBy,
+  }) : prepareBy = prepareBy ?? leaveBy;
+  final DateTime eta, leaveBy, readyAt, prepareBy;
   bool get canCatch => !readyAt.isAfter(eta);
   int get spareSeconds => eta.difference(readyAt).inSeconds;
 }
@@ -12,15 +17,29 @@ BoardingEstimate? boardingEstimate(
   int walkMinutes,
   DateTime now, {
   int marginMinutes = 1,
+  int preparationMinutes = 0,
 }) {
-  if (walkMinutes < 0 || walkMinutes > 240 || marginMinutes < 0) return null;
-  final received = DateTime.tryParse(train['receivedAt'] as String? ?? '');
-  final eta = DateTime.tryParse(train['eta'] as String? ?? '');
+  if (walkMinutes < 0 ||
+      walkMinutes > 240 ||
+      marginMinutes < 0 ||
+      marginMinutes > 30 ||
+      preparationMinutes < 0 ||
+      preparationMinutes > 120) {
+    return null;
+  }
+  final received = DateTime.tryParse('${train['receivedAt'] ?? ''}');
+  final eta = DateTime.tryParse('${train['eta'] ?? ''}');
   if (received == null || eta == null || train['fresh'] != true) return null;
   final age = now.difference(received).inSeconds;
   if (age < -30 || age > 120 || !eta.isAfter(now)) return null;
   final duration = Duration(minutes: walkMinutes + marginMinutes);
-  return BoardingEstimate(eta, eta.subtract(duration), now.add(duration));
+  final leave = eta.subtract(duration);
+  return BoardingEstimate(
+    eta,
+    leave,
+    now.add(duration + Duration(minutes: preparationMinutes)),
+    prepareBy: leave.subtract(Duration(minutes: preparationMinutes)),
+  );
 }
 
 class LivePlan {
@@ -31,8 +50,8 @@ class LivePlan {
 
 /// Arrival forecasts are usable only while fresh; allow a minute to board.
 LivePlan? livePlan(Map<String, dynamic> train, Journey journey, DateTime now) {
-  final received = DateTime.tryParse(train['receivedAt'] as String? ?? '');
-  final eta = DateTime.tryParse(train['eta'] as String? ?? '');
+  final received = DateTime.tryParse('${train['receivedAt'] ?? ''}');
+  final eta = DateTime.tryParse('${train['eta'] ?? ''}');
   if (received == null || eta == null || train['fresh'] != true) return null;
   final age = now.difference(received).inSeconds;
   if (age < -30 || age > 120 || !eta.isAfter(now)) return null;
