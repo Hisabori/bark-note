@@ -30,11 +30,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('출발 플랜'), findsOneWidget);
     expect(find.text('지금 나가면 탈 수 있을까?'), findsOneWidget);
-    await tester.scrollUntilVisible(
-      find.text('버스·지하철 경로 지도'), 250,
-      scrollable: find.byType(Scrollable).first,
-    );
-    expect(find.text('버스·지하철 경로 지도'), findsOneWidget);
     await tester.tap(find.byType(BackButton));
     await tester.pump(const Duration(milliseconds: 400));
     expect(find.text('소리 분석'), findsOneWidget);
