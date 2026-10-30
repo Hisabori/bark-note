@@ -9,10 +9,19 @@ import UserNotifications
   override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
+  override func applicationDidEnterBackground(_ application: UIApplication) {
+    super.applicationDidEnterBackground(application)
+    if #available(iOS 16.2, *) {
+      Task { @MainActor in BarkLiveController.shared.end(result: { _ in }) }
+    }
+  }
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     let channel = FlutterMethodChannel(name: "com.railtime/alerts", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     alertsChannel = channel
+    if #available(iOS 16.2, *) {
+      Task { @MainActor in BarkLiveController.shared.end(result: { _ in }) }
+    }
     channel.setMethodCallHandler { call, result in
       #if targetEnvironment(simulator)
       if call.method == "startupReady" {
@@ -25,6 +34,16 @@ import UserNotifications
         return
       }
       #endif
+      if ["barkSync", "barkEnd"].contains(call.method) {
+        if #available(iOS 16.2, *) {
+          DispatchQueue.main.async {
+            if call.method == "barkSync" {
+              BarkLiveController.shared.sync(call.arguments as? [String: Any] ?? [:], result: result)
+            } else { BarkLiveController.shared.end(result: result) }
+          }
+        } else { result(call.method == "barkEnd") }
+        return
+      }
       if ["liveStart", "liveEnd", "liveStatus"].contains(call.method) {
         if #available(iOS 16.2, *) {
           DispatchQueue.main.async {
@@ -145,6 +164,70 @@ private final class DepartureLiveController {
       guard let activity = Activity<DepartureAttributes>.activities.first(where: { $0.activityState == .active || $0.activityState == .stale }) else { result(["active": false]); return }
       result(["active": true, "kind": activity.attributes.kind ?? "train", "label": activity.attributes.train,
         "stale": activity.activityState == .stale, "staleEpoch": (activity.content.staleDate?.timeIntervalSince1970 ?? 0) * 1000, "leaveEpoch": activity.content.state.leaveAt.timeIntervalSince1970 * 1000])
+    }
+  }
+}
+
+
+@available(iOS 16.2, *)
+@MainActor
+private final class BarkLiveController {
+  static let shared = BarkLiveController()
+  private var pending: Task<Void, Never>?
+  private var expiry: Task<Void, Never>?
+  private func enqueue(_ operation: @escaping @MainActor () async -> Void) {
+    let previous = pending
+    pending = Task { @MainActor in
+      await previous?.value
+      await operation()
+    }
+  }
+  func sync(_ args: [String: Any], result: @escaping FlutterResult) {
+    enqueue {
+      guard UIApplication.shared.applicationState == .active,
+        ActivityAuthorizationInfo().areActivitiesEnabled,
+        let elapsed = args["elapsed"] as? Int, (0...300).contains(elapsed),
+        let processed = args["processed"] as? Int, (0...10000).contains(processed),
+        let positive = args["positive"] as? Int, (0...processed).contains(positive),
+        let percent = args["barkPercent"] as? Int, (0...100).contains(percent),
+        let signal = args["signal"] as? String,
+        ["waiting", "bark", "dog", "speech", "quiet"].contains(signal)
+      else { result(false); return }
+      let now = Date()
+      let state = BarkAnalysisAttributes.ContentState(signal: signal,
+        barkPercent: percent, elapsed: elapsed, processed: processed,
+        positive: positive, updatedAt: now)
+      let content = ActivityContent(state: state, staleDate: now.addingTimeInterval(8))
+      let activities = Activity<BarkAnalysisAttributes>.activities
+      if let current = activities.first(where: { $0.activityState == .active || $0.activityState == .stale }) {
+        await current.update(content)
+        for other in activities where other.id != current.id {
+          await other.end(nil, dismissalPolicy: .immediate)
+        }
+        result(true)
+      } else {
+        do {
+          _ = try Activity.request(attributes: BarkAnalysisAttributes(startedAt: now),
+            content: content, pushType: nil)
+          self.expiry?.cancel()
+          self.expiry = Task { @MainActor in
+            do { try await Task.sleep(nanoseconds: 300_000_000_000) }
+            catch { return }
+            self.end(result: { _ in })
+          }
+          result(true)
+        } catch { result(false) }
+      }
+    }
+  }
+  func end(result: @escaping FlutterResult) {
+    enqueue {
+      self.expiry?.cancel()
+      self.expiry = nil
+      for activity in Activity<BarkAnalysisAttributes>.activities {
+        await activity.end(nil, dismissalPolicy: .immediate)
+      }
+      result(true)
     }
   }
 }

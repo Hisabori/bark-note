@@ -12,3 +12,16 @@ struct DepartureAttributes: ActivityAttributes {
     var train: String
     var kind: String?
 }
+
+@available(iOS 16.2, *)
+struct BarkAnalysisAttributes: ActivityAttributes {
+    struct ContentState: Codable, Hashable {
+        var signal: String
+        var barkPercent: Int
+        var elapsed: Int
+        var processed: Int
+        var positive: Int
+        var updatedAt: Date
+    }
+    var startedAt: Date
+}

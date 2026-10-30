@@ -4,7 +4,10 @@ import SwiftUI
 
 @main
 struct DepartureWidgetBundle: WidgetBundle {
-    var body: some Widget { DepartureWidget() }
+    var body: some Widget {
+        DepartureWidget()
+        BarkAnalysisWidget()
+    }
 }
 
 struct DepartureWidget: Widget {
@@ -45,5 +48,56 @@ struct DepartureCountdown: View {
     var body: some View {
         let now = Date()
         Text(timerInterval: now...max(now, until), countsDown: true, showsHours: false)
+    }
+}
+
+struct BarkAnalysisWidget: Widget {
+    private func label(_ state: BarkAnalysisAttributes.ContentState, stale: Bool) -> String {
+        if stale { return "앱에서 분석 상태 확인" }
+        switch state.signal {
+        case "bark": return "짖음 소리 후보"
+        case "dog": return "강아지 소리 후보"
+        case "speech": return "말소리 반응"
+        case "quiet": return "뚜렷한 짖음 반응 없음"
+        default: return "소리를 분석하고 있어요"
+        }
+    }
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: BarkAnalysisAttributes.self) { context in
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Bark Note · 실시간 분석", systemImage: "pawprint.fill").font(.headline)
+                Text(label(context.state, stale: context.isStale)).font(.title3.bold())
+                Text("분석 \(context.state.elapsed)초 · 짖음 모델 반응 \(context.state.barkPercent)%").font(.subheadline)
+                Text("반응 창 \(context.state.positive) / 분석 창 \(context.state.processed) · 겹치는 창 기준").font(.caption)
+                Text("감정·정확도 아님 · 앱을 뒤로 보내면 분석 종료").font(.caption2)
+            }.padding().foregroundColor(.white).activityBackgroundTint(Color.black)
+                .activitySystemActionForegroundColor(.white)
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.leading) {
+                    Label("실시간 분석", systemImage: "pawprint.fill").font(.caption)
+                }
+                DynamicIslandExpandedRegion(.trailing) {
+                    Text("\(context.state.elapsed)초").monospacedDigit().font(.caption)
+                }
+                DynamicIslandExpandedRegion(.bottom) {
+                    VStack(spacing: 5) {
+                        Text(label(context.state, stale: context.isStale)).font(.headline)
+                        if !context.isStale {
+                            Text("짖음 모델 반응 \(context.state.barkPercent)% · 감정·정확도 아님").font(.caption)
+                        }
+                        Text("앱이 열려 있는 동안 분석 · 최대 5분").font(.caption2)
+                    }
+                }
+            } compactLeading: {
+                Image(systemName: "pawprint.fill").foregroundColor(.mint)
+            } compactTrailing: {
+                Text(context.isStale ? "확인" : context.state.signal == "bark" ? "짖음" : "분석")
+                    .font(.caption2).lineLimit(1)
+            } minimal: {
+                Image(systemName: context.isStale ? "exclamationmark.circle" : "waveform")
+                    .foregroundColor(.mint)
+            }
+        }
     }
 }

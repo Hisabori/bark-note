@@ -1,4 +1,7 @@
 import 'dart:async';
+import 'dart:io';
+import 'package:flutter/services.dart';
+import 'bark_island.dart';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
@@ -46,17 +49,45 @@ class LiveBarkPage extends StatefulWidget {
 class _LiveBarkPageState extends State<LiveBarkPage>
     with WidgetsBindingObserver {
   late final LiveBarkSession session;
+  late final BarkIslandBridge island;
+  bool showIsland = true;
+  static const islandChannel = MethodChannel('com.railtime/alerts');
   bool leaving = false;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    island = BarkIslandBridge(
+      send: (method, args) => islandChannel.invokeMethod<bool>(method, args),
+      changed: () {
+        if (mounted) setState(() {});
+      },
+    );
     session = LiveBarkSession(
       microphone: widget.microphoneFactory?.call() ?? RecordLiveMicrophone(),
       scorerFactory: widget.scorerFactory ?? LiveBarkWorker.new,
       changed: () {
+        syncIsland();
         if (mounted) setState(() {});
       },
+    );
+  }
+
+  void syncIsland() {
+    if (!Platform.isIOS) return;
+    final now = DateTime.now();
+    island.update(
+      showIsland && session.running
+          ? barkIslandSnapshot(
+              elapsed: session.elapsed,
+              processed: session.processed,
+              positive: session.positive,
+              scores: session.latest,
+              updated: session.updated,
+              now: now,
+              delayed: session.elapsed - session.latestEnd > 3,
+            )
+          : null,
     );
   }
 
@@ -80,6 +111,7 @@ class _LiveBarkPageState extends State<LiveBarkPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    island.dispose();
     unawaited(session.dispose());
     super.dispose();
   }
@@ -122,6 +154,27 @@ class _LiveBarkPageState extends State<LiveBarkPage>
                 subtitle: '녹음 파일 없이 기기 안에서 짖음 소리 후보를 살펴봐요.',
                 icon: Icons.hearing_rounded,
               ),
+              if (Platform.isIOS)
+                Card(
+                  child: Column(
+                    children: [
+                      SwitchListTile(
+                        title: const Text('다이내믹 아일랜드 표시'),
+                        subtitle: const Text('짖음 후보·분석 시간 · 앱을 뒤로 보내면 종료'),
+                        value: showIsland,
+                        onChanged: (value) {
+                          setState(() => showIsland = value);
+                          syncIsland();
+                        },
+                      ),
+                      if (island.message.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                          child: Text(island.message),
+                        ),
+                    ],
+                  ),
+                ),
               Card(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
