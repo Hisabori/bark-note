@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// Content stays opaque and legible; navigation is visually separated.
+/// Opaque content and transparent navigation for bounded glass surfaces.
 ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
   final dark = brightness == Brightness.dark;
   final background = dark ? const Color(0xff15171b) : const Color(0xfff2f3f8);
@@ -38,7 +38,13 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
       surfaceTintColor: Colors.transparent,
       elevation: 0,
       margin: const EdgeInsets.symmetric(vertical: 6),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(
+          color: dark ? const Color(0xff37414e) : const Color(0xb3ffffff),
+          width: 1,
+        ),
+      ),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
@@ -81,7 +87,7 @@ ThemeData buildAppTheme({Brightness brightness = Brightness.light}) {
     ),
     navigationBarTheme: NavigationBarThemeData(
       height: 76,
-      backgroundColor: card,
+      backgroundColor: Colors.transparent,
       surfaceTintColor: Colors.transparent,
       indicatorColor: scheme.primary.withValues(alpha: .10),
       labelTextStyle: WidgetStateProperty.resolveWith(
@@ -181,7 +187,7 @@ class CareSummarySurface extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [Color(0xffd3c9e8), Color(0xfff0ddd7), Color(0xfff2f3f8)],
+              colors: [Color(0xffd4e5fb), Color(0xffe1e4f5), Color(0xfff2f3f8)],
             ),
           ),
         ),

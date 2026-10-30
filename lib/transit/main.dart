@@ -1,4 +1,5 @@
 import '../app_theme.dart';
+import '../glass_surface.dart';
 import 'live_clock.dart';
 import 'activity_payload.dart';
 import 'kakao_api.dart';
@@ -716,6 +717,7 @@ class _HomeState extends State<Home> {
   Widget build(BuildContext context) {
     final plan = journey;
     return Scaffold(
+      extendBody: true,
       appBar: AppBar(
         title: const Text('나갈때'),
         actions: [
@@ -728,8 +730,9 @@ class _HomeState extends State<Home> {
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(28),
+        child: CareGlassSurface(
+          navigation: true,
+          radius: 32,
           child: NavigationBar(
             selectedIndex: tab,
             onDestinationSelected: (v) => setState(() => tab = v),
@@ -759,8 +762,14 @@ class _HomeState extends State<Home> {
             onAlarm: (time) => schedule(time, basis: '카카오 경로 조회 소요시간 기준'),
           ),
           builder: (context, now, kakaoPanel) => SafeArea(
+            bottom: false,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              padding: EdgeInsets.fromLTRB(
+                16,
+                8,
+                16,
+                140 + MediaQuery.viewPaddingOf(context).bottom,
+              ),
               children: [
                 if (loading || restoring) const LinearProgressIndicator(),
                 if (message.isNotEmpty)

@@ -32,6 +32,7 @@ try:
     for attempt in (1, 2):
         run('xcrun', 'simctl', 'terminate', udid, bundle, check=False)
         marker.unlink(missing_ok=True)
+        (container / 'Documents/glass-smoke-backend').unlink(missing_ok=True)
         launched = run('xcrun', 'simctl', 'launch', udid, bundle)
         print(launched, flush=True)
         pid = int(launched.rsplit(':', 1)[1].strip())
@@ -44,6 +45,9 @@ try:
         assert marker.read_text() == 'first-frame-rendered'
         time.sleep(10)
         os.kill(pid, 0)
+        material = (container / 'Documents/glass-smoke-backend').read_text()
+        assert material in {'system-liquid-glass', 'blur-fallback', 'opaque-accessibility'}
+        print('GLASS_BACKEND:' + material, flush=True)
         run('xcrun', 'simctl', 'io', udid, 'screenshot', str(out / f'launch-{attempt}.png'))
         print(f'Launch {attempt}: first frame rendered; process still alive after 10 seconds', flush=True)
     # Only the clean simulator home is transported here, without private keys.

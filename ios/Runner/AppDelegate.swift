@@ -17,6 +17,7 @@ import UserNotifications
   }
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    engineBridge.applicationRegistrar.register(CareGlassFactory(), withId: "com.barknote/liquid-glass")
     let channel = FlutterMethodChannel(name: "com.railtime/alerts", binaryMessenger: engineBridge.applicationRegistrar.messenger())
     alertsChannel = channel
     if #available(iOS 16.2, *) {
@@ -229,5 +230,88 @@ final class BarkLiveController {
       }
       result(true)
     }
+  }
+}
+
+
+private final class CareGlassFactory: NSObject, FlutterPlatformViewFactory {
+  func create(withFrame frame: CGRect, viewIdentifier viewId: Int64, arguments args: Any?) -> FlutterPlatformView {
+    let radius = (args as? [String: Any])?["radius"] as? NSNumber
+    return CareGlassPlatformView(frame: frame, radius: CGFloat(radius?.doubleValue ?? 32))
+  }
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol { FlutterStandardMessageCodec.sharedInstance() }
+}
+
+private final class CareGlassPlatformView: NSObject, FlutterPlatformView {
+  private let backdrop: CareGlassBackdrop
+  init(frame: CGRect, radius: CGFloat) {
+    backdrop = CareGlassBackdrop(frame: frame, radius: radius)
+    super.init()
+  }
+  func view() -> UIView { backdrop }
+}
+
+private final class CareGlassBackdrop: UIView {
+  private let effectView = UIVisualEffectView()
+  private let radius: CGFloat
+  init(frame: CGRect, radius: CGFloat) {
+    self.radius = min(60, max(0, radius))
+    super.init(frame: frame)
+    isUserInteractionEnabled = false
+    accessibilityElementsHidden = true
+    overrideUserInterfaceStyle = .light
+    effectView.frame = bounds
+    effectView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    addSubview(effectView)
+    NotificationCenter.default.addObserver(self, selector: #selector(refreshMaterial),
+      name: UIAccessibility.reduceTransparencyStatusDidChangeNotification, object: nil)
+    refreshMaterial()
+  }
+  required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
+  deinit { NotificationCenter.default.removeObserver(self) }
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    effectView.frame = bounds
+    effectView.layer.cornerRadius = radius
+    effectView.layer.cornerCurve = .continuous
+    effectView.clipsToBounds = true
+    layer.cornerRadius = radius
+    layer.cornerCurve = .continuous
+    clipsToBounds = true
+  }
+  override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+    super.traitCollectionDidChange(previousTraitCollection)
+    refreshMaterial()
+  }
+  @objc private func refreshMaterial() {
+    let reduced = UIAccessibility.isReduceTransparencyEnabled || traitCollection.accessibilityContrast == .high
+    var backend = "blur-fallback"
+    if reduced {
+      effectView.effect = nil
+      backgroundColor = .white
+      effectView.contentView.backgroundColor = .white
+      backend = "opaque-accessibility"
+    } else {
+      backgroundColor = .clear
+      effectView.contentView.backgroundColor = UIColor.white.withAlphaComponent(0.12)
+      #if compiler(>=6.2)
+      if #available(iOS 26.0, *) {
+        let glass = UIGlassEffect(style: .regular)
+        glass.isInteractive = false
+        effectView.effect = glass
+        backend = "system-liquid-glass"
+      } else {
+        effectView.effect = UIBlurEffect(style: .systemThinMaterialLight)
+      }
+      #else
+      effectView.effect = UIBlurEffect(style: .systemThinMaterialLight)
+      #endif
+    }
+    #if targetEnvironment(simulator)
+    if let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first {
+      try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+      try? backend.write(to: folder.appendingPathComponent("glass-smoke-backend"), atomically: true, encoding: .utf8)
+    }
+    #endif
   }
 }

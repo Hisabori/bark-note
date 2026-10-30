@@ -1,4 +1,5 @@
 import 'app_theme.dart';
+import 'glass_surface.dart';
 import 'bark_history.dart';
 import 'live_bark_page.dart';
 import 'package:flutter/material.dart';
@@ -41,6 +42,7 @@ class FeatureHome extends StatelessWidget {
     return CareSummarySurface(
       child: Scaffold(
         backgroundColor: Colors.transparent,
+        extendBody: true,
         appBar: AppBar(
           title: const Text(
             '요약',
@@ -50,52 +52,46 @@ class FeatureHome extends StatelessWidget {
         ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              borderRadius: BorderRadius.circular(36),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x0c172d48),
-                  blurRadius: 24,
-                  offset: Offset(0, 8),
+          child: CareGlassSurface(
+            navigation: true,
+            radius: 36,
+            child: NavigationBar(
+              selectedIndex: 0,
+              onDestinationSelected: (index) {
+                if (index == 1) open(context, const bark.Home());
+                if (index == 2) open(context, const transit.Home());
+              },
+              destinations: const [
+                NavigationDestination(
+                  icon: Icon(Icons.home_outlined),
+                  selectedIcon: Icon(Icons.home_rounded),
+                  label: '오늘',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.pets_outlined),
+                  label: '강아지',
+                ),
+                NavigationDestination(
+                  icon: Icon(Icons.directions_transit_outlined),
+                  label: '이동',
                 ),
               ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(36),
-              child: NavigationBar(
-                selectedIndex: 0,
-                onDestinationSelected: (index) {
-                  if (index == 1) open(context, const bark.Home());
-                  if (index == 2) open(context, const transit.Home());
-                },
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.home_outlined),
-                    selectedIcon: Icon(Icons.home_rounded),
-                    label: '오늘',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.pets_outlined),
-                    label: '강아지',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.directions_transit_outlined),
-                    label: '이동',
-                  ),
-                ],
-              ),
             ),
           ),
         ),
         body: SafeArea(
+          bottom: false,
           child: Align(
             alignment: Alignment.topCenter,
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 760),
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  20,
+                  20,
+                  128 + MediaQuery.viewPaddingOf(context).bottom,
+                ),
                 children: [
                   Text(
                     '${now.month}월 ${now.day}일 · 오늘도 함께',
@@ -116,7 +112,7 @@ class FeatureHome extends StatelessWidget {
                     style: TextStyle(fontSize: 17, color: muted, height: 1.5),
                   ),
                   const SizedBox(height: 24),
-                  Card(
+                  CareGlassSurface(
                     child: Padding(
                       padding: const EdgeInsets.all(22),
                       child: Column(
