@@ -60,6 +60,7 @@ void main() {
       expect(find.text('출발 안내'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
+      debugDefaultTargetPlatformOverride = null;
     },
   );
   testWidgets(
