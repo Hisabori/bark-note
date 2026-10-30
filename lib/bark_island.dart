@@ -105,25 +105,29 @@ Map<String, dynamic> barkIslandSnapshot({
         : 0;
   }
 
+  bool reacts(String key) {
+    final value = scores?[key];
+    return value is num && value.isFinite && value >= .3 && value <= 1;
+  }
+
   final fresh =
+      scores != null &&
       updated != null &&
       now.difference(updated).inMilliseconds >= 0 &&
       now.difference(updated) <= const Duration(seconds: 3) &&
       !delayed;
-  final bark = percent('bark'),
-      dog = percent('dog'),
-      speech = percent('speech');
+  final bark = percent('bark');
   return {
     'elapsed': elapsed.isFinite ? elapsed.round().clamp(0, 300) : 0,
     'processed': processed.clamp(0, 10000),
     'positive': positive.clamp(0, processed.clamp(0, 10000)),
     'signal': !fresh
         ? 'waiting'
-        : bark >= 30
+        : reacts('bark')
         ? 'bark'
-        : dog >= 30
+        : reacts('dog')
         ? 'dog'
-        : speech >= 30
+        : reacts('speech')
         ? 'speech'
         : 'quiet',
     'barkPercent': fresh ? bark : 0,

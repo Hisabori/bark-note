@@ -103,6 +103,9 @@ void main() {
       );
       final fresh = snapshot(now, {'bark': .9});
       expect(fresh['signal'], 'bark');
+      expect(snapshot(now, {'bark': .299})['signal'], 'quiet');
+      expect(snapshot(now, {'bark': .3})['signal'], 'bark');
+      expect(snapshot(now, null)['signal'], 'waiting');
       expect(fresh['barkPercent'], 90);
       expect(fresh['elapsed'], 0);
       expect(fresh['positive'], 2);
