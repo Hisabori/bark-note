@@ -171,7 +171,7 @@ private final class DepartureLiveController {
 
 @available(iOS 16.2, *)
 @MainActor
-private final class BarkLiveController {
+final class BarkLiveController {
   static let shared = BarkLiveController()
   private var pending: Task<Void, Never>?
   private var expiry: Task<Void, Never>?
