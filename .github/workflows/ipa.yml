@@ -16,7 +16,7 @@ permissions:
   contents: read
 jobs:
   ipa:
-    runs-on: macos-15-intel
+    runs-on: macos-latest
     env:
       BYPASS_PERMISSION_LOCATION_ALWAYS: '1'
     timeout-minutes: 35
