@@ -13,7 +13,7 @@ void main() {
     'lens moves with tab selection and exposes each label once to accessibility',
     (tester) async {
       final semantics = tester.ensureSemantics();
-      addTearDown(semantics.dispose);
+      try {
       var selected = 0;
       await tester.pumpWidget(
         MaterialApp(
@@ -48,6 +48,7 @@ void main() {
       expect(find.byType(BackdropFilter), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox());
+      } finally { semantics.dispose(); }
     },
   );
   testWidgets(
