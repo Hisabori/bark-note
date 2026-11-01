@@ -1,5 +1,6 @@
 import 'app_theme.dart';
 import 'glass_surface.dart';
+import 'lens_navigation.dart';
 import 'bark_history.dart';
 import 'live_bark_page.dart';
 import 'package:flutter/material.dart';
@@ -52,31 +53,27 @@ class FeatureHome extends StatelessWidget {
         ),
         bottomNavigationBar: SafeArea(
           minimum: const EdgeInsets.fromLTRB(20, 8, 20, 12),
-          child: CareGlassSurface(
-            navigation: true,
-            radius: 36,
-            child: NavigationBar(
-              selectedIndex: 0,
-              onDestinationSelected: (index) {
-                if (index == 1) open(context, const bark.Home());
-                if (index == 2) open(context, const transit.Home());
-              },
-              destinations: const [
-                NavigationDestination(
-                  icon: Icon(Icons.home_outlined),
-                  selectedIcon: Icon(Icons.home_rounded),
-                  label: '오늘',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.pets_outlined),
-                  label: '강아지',
-                ),
-                NavigationDestination(
-                  icon: Icon(Icons.directions_transit_outlined),
-                  label: '이동',
-                ),
-              ],
-            ),
+          child: CareLensNavigationBar(
+            selectedIndex: 0,
+            onDestinationSelected: (index) {
+              if (index == 1) open(context, const bark.Home());
+              if (index == 2) open(context, const transit.Home());
+            },
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.home_outlined),
+                selectedIcon: Icon(Icons.home_rounded),
+                label: '오늘',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.pets_outlined),
+                label: '강아지',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.directions_transit_outlined),
+                label: '이동',
+              ),
+            ],
           ),
         ),
         body: SafeArea(
@@ -90,7 +87,7 @@ class FeatureHome extends StatelessWidget {
                   20,
                   20,
                   20,
-                  128 + MediaQuery.viewPaddingOf(context).bottom,
+                  CareLensNavigationBar.contentInset(context),
                 ),
                 children: [
                   Text(

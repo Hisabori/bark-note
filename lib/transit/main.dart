@@ -1,5 +1,5 @@
 import '../app_theme.dart';
-import '../glass_surface.dart';
+import '../lens_navigation.dart';
 import 'live_clock.dart';
 import 'activity_payload.dart';
 import 'kakao_api.dart';
@@ -730,21 +730,17 @@ class _HomeState extends State<Home> {
       ),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-        child: CareGlassSurface(
-          navigation: true,
-          radius: 32,
-          child: NavigationBar(
-            selectedIndex: tab,
-            onDestinationSelected: (v) => setState(() => tab = v),
-            destinations: const [
-              NavigationDestination(icon: Icon(Icons.schedule), label: '출발 플랜'),
-              NavigationDestination(
-                icon: Icon(Icons.train_outlined),
-                label: '실시간 열차',
-              ),
-              NavigationDestination(icon: Icon(Icons.tune), label: '설정'),
-            ],
-          ),
+        child: CareLensNavigationBar(
+          selectedIndex: tab,
+          onDestinationSelected: (v) => setState(() => tab = v),
+          destinations: const [
+            NavigationDestination(icon: Icon(Icons.schedule), label: '출발 플랜'),
+            NavigationDestination(
+              icon: Icon(Icons.train_outlined),
+              label: '실시간 열차',
+            ),
+            NavigationDestination(icon: Icon(Icons.tune), label: '설정'),
+          ],
         ),
       ),
       body: AbsorbPointer(
@@ -768,7 +764,7 @@ class _HomeState extends State<Home> {
                 16,
                 8,
                 16,
-                140 + MediaQuery.viewPaddingOf(context).bottom,
+                CareLensNavigationBar.contentInset(context) + 12,
               ),
               children: [
                 if (loading || restoring) const LinearProgressIndicator(),
